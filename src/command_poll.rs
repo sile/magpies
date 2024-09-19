@@ -12,6 +12,9 @@ pub struct PollCommand {
     pub command_name: PathBuf,
     pub command_args: Vec<String>,
 
+    #[clap(short, long)]
+    pub target: Option<String>,
+
     #[clap(short = 'i', long, default_value = "1")]
     pub poll_interval: Seconds,
 
@@ -20,7 +23,12 @@ pub struct PollCommand {
 }
 
 impl PollCommand {
-    pub fn run(self) -> orfail::Result<()> {
+    pub fn run(mut self) -> orfail::Result<()> {
+        let target = self
+            .target
+            .take()
+            .unwrap_or_else(|| format!("target.{}", std::process::id()));
+
         let start_time = Instant::now();
         let mut next_poll_time = start_time;
         while self
@@ -28,8 +36,11 @@ impl PollCommand {
             .map_or(true, |d| start_time.elapsed() <= d.get())
         {
             let value = self.poll().or_fail()?;
-            let timestamp = Seconds::new(UNIX_EPOCH.elapsed().or_fail()?);
-            let record = Record { timestamp, value };
+            let record = Record {
+                target: target.clone(),
+                timestamp: Seconds::new(UNIX_EPOCH.elapsed().or_fail()?),
+                value,
+            };
             println!("{}", serde_json::to_string(&record).or_fail()?);
 
             next_poll_time += self.poll_interval.get();

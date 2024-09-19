@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Record {
+    pub target: String,
     pub timestamp: Seconds,
     pub value: serde_json::Value,
 }
