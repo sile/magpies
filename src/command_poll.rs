@@ -1,19 +1,16 @@
-use std::{
-    path::PathBuf,
-    time::{Instant, UNIX_EPOCH},
-};
+use std::{sync::mpsc, time::Duration};
 
 use orfail::OrFail;
 
-use crate::record::{Record, Seconds};
+use crate::{
+    poller::{PollTarget, Poller},
+    record::Seconds,
+};
 
 #[derive(Debug, clap::Args)]
 pub struct PollCommand {
-    pub command_name: PathBuf,
-    pub command_args: Vec<String>,
-
-    #[clap(short, long)]
-    pub target: Option<String>,
+    pub target: PollTarget,
+    pub additional_targets: Vec<PollTarget>,
 
     #[clap(short = 'i', long, default_value = "1")]
     pub poll_interval: Seconds,
@@ -23,33 +20,41 @@ pub struct PollCommand {
 }
 
 impl PollCommand {
-    pub fn run(mut self) -> orfail::Result<()> {
-        let target = self
-            .target
-            .take()
-            .unwrap_or_else(|| format!("pid.{}", std::process::id()));
+    pub fn run(self) -> orfail::Result<()> {
+        // let start_time = Instant::now();
+        // let mut next_poll_time = start_time;
+        let (record_tx, record_rx) = mpsc::channel();
 
-        let start_time = Instant::now();
-        let mut next_poll_time = start_time;
-        while self
+        let poll_duration = self
             .poll_duration
-            .map_or(true, |d| start_time.elapsed() <= d.get())
-        {
-            let value = self.poll().or_fail()?;
-            let record = Record {
-                target: target.clone(),
-                timestamp: Seconds::new(UNIX_EPOCH.elapsed().or_fail()?),
-                value,
-            };
-            println!("{}", serde_json::to_string(&record).or_fail()?);
-
-            next_poll_time += self.poll_interval.get();
-            std::thread::sleep(next_poll_time.saturating_duration_since(Instant::now()));
+            .unwrap_or(Seconds::new(Duration::from_secs(u64::MAX)));
+        for target in std::iter::once(self.target).chain(self.additional_targets.into_iter()) {
+            Poller::start(
+                target,
+                self.poll_interval.get(),
+                poll_duration.get(),
+                record_tx.clone(),
+            );
         }
-        Ok(())
-    }
 
-    fn poll(&self) -> orfail::Result<serde_json::Value> {
-        todo!();
+        while let Ok(record) = record_rx.recv() {
+            println!("{}", serde_json::to_string(&record).or_fail()?);
+        }
+
+        // while self
+        //     .poll_duration
+        //     .map_or(true, |d| start_time.elapsed() <= d.get())
+        // {
+        //     // let value = self.poll().or_fail()?;
+        //     // let record = Record {
+        //     //     target: target.clone(),
+        //     //     timestamp: Seconds::new(UNIX_EPOCH.elapsed().or_fail()?),
+        //     //     value,
+        //     // };
+
+        //     next_poll_time += self.poll_interval.get();
+        //     std::thread::sleep(next_poll_time.saturating_duration_since(Instant::now()));
+        // }
+        Ok(())
     }
 }
