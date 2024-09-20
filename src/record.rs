@@ -1,4 +1,8 @@
-use std::{num::ParseFloatError, str::FromStr, time::Duration};
+use std::{
+    num::ParseFloatError,
+    str::FromStr,
+    time::{Duration, UNIX_EPOCH},
+};
 
 use serde::{Deserialize, Serialize};
 
@@ -22,6 +26,10 @@ impl Seconds {
 
     pub const fn get(self) -> Duration {
         self.0
+    }
+
+    pub fn timestamp() -> Self {
+        Self::new(UNIX_EPOCH.elapsed().unwrap_or_default())
     }
 }
 

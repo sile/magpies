@@ -7,6 +7,8 @@ use crate::{
     record::Seconds,
 };
 
+const YEAR: Duration = Duration::from_secs(364 * 24 * 60 * 60);
+
 #[derive(Debug, clap::Args)]
 pub struct PollCommand {
     pub target: PollTarget,
@@ -21,13 +23,9 @@ pub struct PollCommand {
 
 impl PollCommand {
     pub fn run(self) -> orfail::Result<()> {
-        // let start_time = Instant::now();
-        // let mut next_poll_time = start_time;
         let (record_tx, record_rx) = mpsc::channel();
 
-        let poll_duration = self
-            .poll_duration
-            .unwrap_or(Seconds::new(Duration::from_secs(u64::MAX)));
+        let poll_duration = self.poll_duration.unwrap_or(Seconds::new(YEAR));
         for target in std::iter::once(self.target).chain(self.additional_targets.into_iter()) {
             Poller::start(
                 target,

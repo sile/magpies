@@ -10,18 +10,18 @@ pub struct TargetCommand {
     pub command_args: Vec<String>,
 
     #[clap(short, long)]
-    pub target_name: Option<String>,
+    pub target: Option<String>,
 }
 
 impl TargetCommand {
     pub fn run(mut self) -> orfail::Result<()> {
-        let target_name = self
-            .target_name
+        let target = self
+            .target
             .take()
             .unwrap_or_else(|| format!("target.{}", std::process::id()));
 
         let target = PollTarget {
-            target_name,
+            target,
             command_path: self.command_path,
             command_args: self.command_args,
         };
