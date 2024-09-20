@@ -27,7 +27,7 @@ impl PollCommand {
         let target = self
             .target
             .take()
-            .unwrap_or_else(|| format!("target.{}", std::process::id()));
+            .unwrap_or_else(|| format!("pid.{}", std::process::id()));
 
         let start_time = Instant::now();
         let mut next_poll_time = start_time;

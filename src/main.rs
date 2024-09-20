@@ -1,5 +1,5 @@
 use clap::Parser;
-use jtsvis::command_poll::PollCommand;
+use magpies::command_poll::PollCommand;
 use orfail::OrFail;
 
 #[derive(Parser)]
