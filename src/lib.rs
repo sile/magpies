@@ -4,3 +4,4 @@ pub mod command_view;
 pub mod jsonl;
 pub mod poller;
 pub mod record;
+pub mod viewer;
