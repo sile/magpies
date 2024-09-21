@@ -298,6 +298,7 @@ name = "magpies"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "crossterm",
  "orfail",
  "ratatui",
  "serde",
