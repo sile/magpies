@@ -145,12 +145,22 @@ impl Viewer {
                 need_redraw = true;
             }
             KeyCode::PageUp => {
-                let n = self.widget_state.agg_table_height.saturating_sub(4).max(1) as i16;
+                let height = if self.app.in_agg_table {
+                    self.widget_state.agg_table_height
+                } else {
+                    self.widget_state.values_table_height
+                };
+                let n = height.saturating_sub(4).max(1) as i16;
                 self.move_cursor(-n);
                 need_redraw = true;
             }
             KeyCode::PageDown => {
-                let n = self.widget_state.agg_table_height.saturating_sub(4).max(1) as i16;
+                let height = if self.app.in_agg_table {
+                    self.widget_state.agg_table_height
+                } else {
+                    self.widget_state.values_table_height
+                };
+                let n = height.saturating_sub(4).max(1) as i16;
                 self.move_cursor(n);
                 need_redraw = true;
             }
@@ -196,6 +206,7 @@ pub struct ViewerWidgetState {
     agg_table_height: u16,
     values_table: TableState,
     values_table_scroll: ScrollbarState,
+    values_table_height: u16,
 }
 
 impl ViewerWidgetState {
@@ -206,6 +217,7 @@ impl ViewerWidgetState {
             agg_table_height: 0,
             values_table: TableState::default().with_selected(0),
             values_table_scroll: ScrollbarState::new(0),
+            values_table_height: 0,
         }
     }
 }
@@ -407,7 +419,7 @@ impl ViewerApp {
             .height(1);
         let rows = segment.aggregated_values.iter().map(|(name, agg_value)| {
             [
-                Cell::from(Text::from(name.clone())),
+                Cell::from(Text::from(name.as_str())),
                 Cell::from(
                     Text::from(agg_value.sum_text(self.options.decimal_places)).right_aligned(),
                 ),
@@ -466,7 +478,7 @@ impl ViewerApp {
     }
 
     fn render_values(&self, area: Rect, buf: &mut Buffer, state: &mut ViewerWidgetState) {
-        //let segment = self.current_segment();
+        let segment = self.current_segment();
         let key = self.selected_item_key(state);
         let title = if let Some(key) = key {
             Title::from(format!("Values of {key:?}").bold())
@@ -477,10 +489,71 @@ impl ViewerApp {
         let block = Block::bordered()
             .title(title.alignment(Alignment::Left))
             .border_set(border::THICK);
-        Paragraph::new(Text::from("TODO"))
-            .left_aligned()
-            .block(block)
-            .render(area, buf);
+
+        let header = ["Target", "Value", "Delta/s"]
+            .into_iter()
+            .map(|t| Cell::from(Text::from(t).centered()))
+            .collect::<Row>()
+            .style(Style::default().bold())
+            .height(1);
+        let rows = key.iter().flat_map(|key| {
+            segment
+                .target_segment_values
+                .iter()
+                .filter_map(|(target, values)| {
+                    values.get(*key).map(|value| {
+                        [
+                            Cell::from(Text::from(target.as_str())),
+                            Cell::from(
+                                Text::from(value.value_text(self.options.decimal_places))
+                                    .right_aligned(),
+                            ),
+                            Cell::from(
+                                Text::from(format!(
+                                    "{}  ", // "  " is the padding for scroll bar
+                                    value.delta_text(self.options.decimal_places)
+                                ))
+                                .right_aligned(),
+                            ),
+                        ]
+                        .into_iter()
+                        .collect::<Row>()
+                    })
+                })
+        });
+        let table = Table::new(
+            rows,
+            [
+                Constraint::Percentage(40),
+                Constraint::Percentage(30),
+                Constraint::Percentage(30),
+            ],
+        )
+        .header(header)
+        .column_spacing(1)
+        .highlight_style(if self.in_agg_table {
+            Style::new()
+        } else {
+            Style::new().reversed()
+        })
+        .block(block);
+        ratatui::widgets::StatefulWidget::render(table, area, buf, &mut state.values_table);
+
+        // Scrollbar
+        ratatui::widgets::StatefulWidget::render(
+            Scrollbar::default()
+                .orientation(ScrollbarOrientation::VerticalRight)
+                .begin_symbol(None)
+                .end_symbol(None),
+            area.inner(Margin {
+                vertical: 1,
+                horizontal: 1,
+            }),
+            buf,
+            &mut state.values_table_scroll,
+        );
+
+        state.values_table_height = area.height;
     }
 
     fn render_chart(&self, area: Rect, buf: &mut Buffer) {

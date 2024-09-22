@@ -515,6 +515,34 @@ impl SegmentValue {
 
         self.delta = number_delta(v0.clone(), v1.clone(), segment_duration);
     }
+
+    pub fn value_text(&self, decimal_places: u8) -> String {
+        match &self.value {
+            RepresentativeValue::Avg(v) => {
+                if let Some(v) = v.as_i64() {
+                    fmt_i64(v)
+                } else if let Some(v) = v.as_f64() {
+                    fmt_f64(v, decimal_places as usize)
+                } else {
+                    unreachable!()
+                }
+            }
+            RepresentativeValue::Set(vs) => serde_json::to_string(vs).expect("unreachable"),
+        }
+    }
+
+    pub fn delta_text(&self, decimal_places: u8) -> String {
+        let Some(v) = &self.delta else {
+            return "".to_owned();
+        };
+        if let Some(v) = v.as_i64() {
+            fmt_i64(v)
+        } else if let Some(v) = v.as_f64() {
+            fmt_f64(v, decimal_places as usize)
+        } else {
+            unreachable!()
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
