@@ -27,6 +27,9 @@ pub struct ViewCommand {
 
     #[clap(short = 'f', long, default_value = ".*")]
     item_filter: Regex,
+
+    #[clap(short, long)]
+    export_file: Option<PathBuf>,
 }
 
 impl ViewCommand {
@@ -39,6 +42,7 @@ impl ViewCommand {
             chart_time_window: self.chart_time_window,
             decimal_places: self.decimal_places,
             item_filter: self.item_filter,
+            export_file: self.export_file,
         };
         let app = Viewer::new(reader, options).or_fail()?;
         app.run().or_fail()?;

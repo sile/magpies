@@ -1,4 +1,4 @@
-use std::{fs::File, time::Duration};
+use std::{fs::File, io::Write, path::PathBuf, time::Duration};
 
 use crossterm::event::{self, KeyCode, KeyEvent, KeyEventKind};
 use orfail::OrFail;
@@ -30,6 +30,7 @@ pub struct ViewerOptions {
     pub chart_time_window: SecondsNonZeroU64,
     pub decimal_places: u8,
     pub item_filter: Regex,
+    pub export_file: Option<PathBuf>,
 }
 
 #[derive(Debug)]
@@ -96,9 +97,15 @@ impl Viewer {
 
         self.terminal
             .draw(|frame| {
-                frame.render_stateful_widget(&self.app, frame.area(), &mut self.widget_state)
+                frame.render_stateful_widget(&self.app, frame.area(), &mut self.widget_state);
+                self.app.export_to_file(frame.area(), frame.buffer_mut());
             })
             .or_fail()?;
+
+        if let Some(e) = self.app.export_error.take() {
+            return Err(e).or_fail();
+        }
+
         Ok(())
     }
 
@@ -232,6 +239,7 @@ pub struct ViewerApp {
     empty_segment: TimeSeriesSegment,
     tail: bool,
     in_agg_table: bool,
+    export_error: Option<orfail::Failure>,
 }
 
 impl ViewerApp {
@@ -245,7 +253,30 @@ impl ViewerApp {
             empty_segment: TimeSeriesSegment::empty(options.interval),
             tail: false,
             in_agg_table: true,
+            export_error: None,
         }
+    }
+
+    fn export_to_file(&mut self, area: Rect, buffer: &Buffer) {
+        let Some(path) = &self.options.export_file else {
+            return;
+        };
+
+        let result = (|| {
+            let width = area.width as usize;
+            let mut file = std::fs::File::create(path).or_fail_with(|e| {
+                format!("Failed to open export file {:?}: {e}", path.display())
+            })?;
+            for (i, cell) in buffer.content().iter().enumerate() {
+                if i > 0 && i % width == 0 {
+                    file.write_all(&[b'\n']).or_fail()?;
+                }
+                file.write_all(cell.symbol().as_bytes()).or_fail()?;
+            }
+            file.write_all(&[b'\n']).or_fail()?;
+            Ok(())
+        })();
+        self.export_error = result.err();
     }
 
     fn insert_record(&mut self, record: &Record) {
@@ -556,8 +587,14 @@ impl ViewerApp {
         state.values_table_height = area.height;
     }
 
-    fn render_chart(&self, area: Rect, buf: &mut Buffer) {
-        let title = Title::from("Delta/s Chart of ...".bold());
+    fn render_chart(&self, area: Rect, buf: &mut Buffer, state: &ViewerWidgetState) {
+        let key = self.selected_item_key(state);
+        let title = if let Some(key) = key {
+            Title::from(format!("Delta/s Chart of {key:?}").bold())
+        } else {
+            Title::from("Delta/s Chart".bold())
+        };
+
         let block = Block::bordered()
             .title(title.alignment(Alignment::Left))
             .border_set(border::THICK);
@@ -578,7 +615,7 @@ impl ratatui::widgets::StatefulWidget for &ViewerApp {
         self.render_help(help_area, buf);
         self.render_aggregation(aggregation_area, buf, state);
         self.render_values(values_area, buf, state);
-        self.render_chart(chart_area, buf);
+        self.render_chart(chart_area, buf, state);
     }
 }
 
