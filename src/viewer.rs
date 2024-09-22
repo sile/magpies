@@ -150,6 +150,24 @@ impl Viewer {
                 }
                 need_redraw = true;
             }
+            KeyCode::PageUp => {
+                let n = self.widget_state.agg_table_height.saturating_sub(4).max(1);
+                self.widget_state.agg_table.scroll_up_by(n);
+                if let Some(i) = self.widget_state.agg_table.selected() {
+                    self.widget_state.agg_table_scroll =
+                        self.widget_state.agg_table_scroll.position(i);
+                }
+                need_redraw = true;
+            }
+            KeyCode::PageDown => {
+                let n = self.widget_state.agg_table_height.saturating_sub(4).max(1);
+                self.widget_state.agg_table.scroll_down_by(n);
+                if let Some(i) = self.widget_state.agg_table.selected() {
+                    self.widget_state.agg_table_scroll =
+                        self.widget_state.agg_table_scroll.position(i);
+                }
+                need_redraw = true;
+            }
             _ => {}
         }
 
@@ -167,6 +185,7 @@ impl Drop for Viewer {
 pub struct ViewerWidgetState {
     agg_table: TableState,
     agg_table_scroll: ScrollbarState,
+    agg_table_height: u16,
 }
 
 impl ViewerWidgetState {
@@ -174,6 +193,7 @@ impl ViewerWidgetState {
         Self {
             agg_table: TableState::default().with_selected(0),
             agg_table_scroll: ScrollbarState::new(0),
+            agg_table_height: 0,
         }
     }
 }
@@ -348,7 +368,7 @@ impl ViewerApp {
             ]),
             Line::from(vec![
                 "Move: ".into(),
-                "<Left>, <Right>, <Up>, <Down>".bold(),
+                "<Left>, <Right>, <Up>, <Down>, <PageUp>, <PageDown>".bold(),
             ]),
         ];
         Paragraph::new(text)
@@ -415,6 +435,8 @@ impl ViewerApp {
             buf,
             &mut state.agg_table_scroll,
         );
+
+        state.agg_table_height = area.height;
     }
 
     fn render_values(&self, area: Rect, buf: &mut Buffer) {
