@@ -13,7 +13,10 @@ use ratatui::{
 };
 use regex::Regex;
 
-use crate::{jsonl::JsonlReader, record::Record};
+use crate::{
+    jsonl::JsonlReader,
+    record::{FlattenedRecord, Record},
+};
 
 const POLL_INTERVAL: Duration = Duration::from_millis(100);
 
@@ -57,7 +60,7 @@ impl Viewer {
         let mut record_seqno = 0;
         let mut records = BTreeMap::new();
         while let Some(record) = reader.read_item::<Record>().or_fail()? {
-            records.insert(RecordKey::new(&record, &mut record_seqno), record);
+            records.insert(RecordKey::new(&record, &mut record_seqno), record.flatten());
         }
 
         let mut terminal = ratatui::init();
@@ -88,9 +91,10 @@ impl Viewer {
 
             if self.options.realtime {
                 while let Some(record) = self.reader.read_item().or_fail()? {
-                    self.app
-                        .records
-                        .insert(RecordKey::new(&record, &mut self.record_seqno), record);
+                    self.app.records.insert(
+                        RecordKey::new(&record, &mut self.record_seqno),
+                        record.flatten(),
+                    );
                     need_redraw = true;
                 }
             }
@@ -130,7 +134,7 @@ impl Drop for Viewer {
 #[derive(Debug)]
 pub struct ViewerApp {
     options: ViewerOptions,
-    records: BTreeMap<RecordKey, Record>,
+    records: BTreeMap<RecordKey, FlattenedRecord>,
 }
 
 impl ViewerApp {
