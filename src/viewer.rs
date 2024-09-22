@@ -256,7 +256,7 @@ impl ViewerApp {
 
         let text = vec![
             Line::from(format!(
-                "Time:    {} ~ {} (between {} ~ {})",
+                "Time:    {}s ~ {}s (between {}s ~ {}s)",
                 fmt_u64(segment.start_time.get() - self.base_time.get()),
                 fmt_u64(
                     segment.end_time().get().min(self.ts.end_time.get()) - self.base_time.get()
@@ -285,9 +285,6 @@ impl ViewerApp {
         let block = Block::bordered()
             .title(title.alignment(Alignment::Left))
             .border_set(border::THICK);
-        let main_layout = Layout::vertical([Constraint::Length(5), Constraint::Min(0)]);
-        let [header_area, _main_area] = main_layout.areas(area);
-
         let text = vec![
             Line::from(vec!["Quit: ".into(), "<Q>".bold()]),
             Line::from(vec![
@@ -309,7 +306,7 @@ impl ViewerApp {
         Paragraph::new(text)
             .left_aligned()
             .block(block)
-            .render(header_area, buf);
+            .render(area, buf);
     }
 
     fn render_aggregation(&self, area: Rect, buf: &mut Buffer) {
@@ -352,9 +349,27 @@ impl ViewerApp {
         .render(area, buf);
     }
 
-    fn render_values(&self, _area: Rect, _buf: &mut Buffer) {}
+    fn render_values(&self, area: Rect, buf: &mut Buffer) {
+        let title = Title::from("Values of ...".bold());
+        let block = Block::bordered()
+            .title(title.alignment(Alignment::Left))
+            .border_set(border::THICK);
+        Paragraph::new(Text::from("TODO"))
+            .left_aligned()
+            .block(block)
+            .render(area, buf);
+    }
 
-    fn render_chart(&self, _area: Rect, _buf: &mut Buffer) {}
+    fn render_chart(&self, area: Rect, buf: &mut Buffer) {
+        let title = Title::from("Delta/s Chart of ...".bold());
+        let block = Block::bordered()
+            .title(title.alignment(Alignment::Left))
+            .border_set(border::THICK);
+        Paragraph::new(Text::from("TODO"))
+            .left_aligned()
+            .block(block)
+            .render(area, buf);
+    }
 }
 
 impl Widget for &ViewerApp {
