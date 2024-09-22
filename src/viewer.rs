@@ -3,12 +3,15 @@ use std::{fs::File, time::Duration};
 use crossterm::event::{self, KeyCode, KeyEvent, KeyEventKind};
 use orfail::OrFail;
 use ratatui::{
-    layout::{Alignment, Constraint, Layout},
+    layout::{Alignment, Constraint, Layout, Margin},
     prelude::{Buffer, Rect},
     style::{Style, Stylize},
     symbols::border,
     text::{Line, Text},
-    widgets::{block::Title, Block, Cell, Paragraph, Row, Table, TableState, Widget},
+    widgets::{
+        block::Title, Block, Cell, Paragraph, Row, Scrollbar, ScrollbarOrientation, ScrollbarState,
+        Table, TableState, Widget,
+    },
     DefaultTerminal,
 };
 use regex::Regex;
@@ -35,6 +38,7 @@ pub struct Viewer {
     reader: JsonlReader<File>,
     exit: bool,
     app: ViewerApp,
+    widget_state: ViewerWidgetState,
 }
 
 impl Viewer {
@@ -52,6 +56,7 @@ impl Viewer {
             reader,
             exit: false,
             app,
+            widget_state: ViewerWidgetState::new(),
         })
     }
 
@@ -83,8 +88,16 @@ impl Viewer {
 
     fn draw(&mut self) -> orfail::Result<()> {
         self.app.sync_state();
+
+        self.widget_state.agg_table_scroll = self
+            .widget_state
+            .agg_table_scroll
+            .content_length(self.app.current_segment().aggregated_values.len());
+
         self.terminal
-            .draw(|frame| frame.render_widget(&self.app, frame.area()))
+            .draw(|frame| {
+                frame.render_stateful_widget(&self.app, frame.area(), &mut self.widget_state)
+            })
             .or_fail()?;
         Ok(())
     }
@@ -115,6 +128,28 @@ impl Viewer {
                 self.app.go_to_end_time();
                 need_redraw = true;
             }
+            KeyCode::Right => {
+                need_redraw = true;
+            }
+            KeyCode::Left => {
+                need_redraw = true;
+            }
+            KeyCode::Up => {
+                self.widget_state.agg_table.scroll_up_by(1);
+                if let Some(i) = self.widget_state.agg_table.selected() {
+                    self.widget_state.agg_table_scroll =
+                        self.widget_state.agg_table_scroll.position(i);
+                }
+                need_redraw = true;
+            }
+            KeyCode::Down => {
+                self.widget_state.agg_table.scroll_down_by(1);
+                if let Some(i) = self.widget_state.agg_table.selected() {
+                    self.widget_state.agg_table_scroll =
+                        self.widget_state.agg_table_scroll.position(i);
+                }
+                need_redraw = true;
+            }
             _ => {}
         }
 
@@ -129,6 +164,21 @@ impl Drop for Viewer {
 }
 
 #[derive(Debug)]
+pub struct ViewerWidgetState {
+    agg_table: TableState,
+    agg_table_scroll: ScrollbarState,
+}
+
+impl ViewerWidgetState {
+    fn new() -> Self {
+        Self {
+            agg_table: TableState::default().with_selected(0),
+            agg_table_scroll: ScrollbarState::new(0),
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct ViewerApp {
     options: ViewerOptions,
     ts: TimeSeries,
@@ -137,7 +187,6 @@ pub struct ViewerApp {
     initialized: bool,
     empty_segment: TimeSeriesSegment,
     tail: bool,
-    agg_table_state: TableState,
 }
 
 impl ViewerApp {
@@ -150,7 +199,6 @@ impl ViewerApp {
             initialized: false,
             empty_segment: TimeSeriesSegment::empty(options.interval),
             tail: false,
-            agg_table_state: TableState::default().with_selected(0),
         }
     }
 
@@ -196,7 +244,7 @@ impl ViewerApp {
         }
 
         if !self.initialized {
-            self.current_time = self.ts.start_time;
+            self.current_time = self.ts.last_start_time();
             self.initialized = true;
         }
 
@@ -309,7 +357,7 @@ impl ViewerApp {
             .render(area, buf);
     }
 
-    fn render_aggregation(&self, area: Rect, buf: &mut Buffer) {
+    fn render_aggregation(&self, area: Rect, buf: &mut Buffer, state: &mut ViewerWidgetState) {
         let segment = self.current_segment();
 
         let title = Title::from("Aggregated Items".bold());
@@ -336,7 +384,7 @@ impl ViewerApp {
             .into_iter()
             .collect::<Row>()
         });
-        Table::new(
+        let table = Table::new(
             rows,
             [
                 Constraint::Percentage(50),
@@ -345,8 +393,24 @@ impl ViewerApp {
             ],
         )
         .header(header)
-        .block(block)
-        .render(area, buf);
+        .column_spacing(1)
+        .highlight_style(Style::new().reversed())
+        .block(block);
+        ratatui::widgets::StatefulWidget::render(table, area, buf, &mut state.agg_table);
+
+        // Scrollbar
+        ratatui::widgets::StatefulWidget::render(
+            Scrollbar::default()
+                .orientation(ScrollbarOrientation::VerticalRight)
+                .begin_symbol(None)
+                .end_symbol(None),
+            area.inner(Margin {
+                vertical: 1,
+                horizontal: 1,
+            }),
+            buf,
+            &mut state.agg_table_scroll,
+        );
     }
 
     fn render_values(&self, area: Rect, buf: &mut Buffer) {
@@ -372,13 +436,15 @@ impl ViewerApp {
     }
 }
 
-impl Widget for &ViewerApp {
-    fn render(self, area: Rect, buf: &mut Buffer) {
+impl ratatui::widgets::StatefulWidget for &ViewerApp {
+    type State = ViewerWidgetState;
+
+    fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
         let (status_area, help_area, aggregation_area, values_area, chart_area) =
             self.calculate_layout(area);
         self.render_status(status_area, buf);
         self.render_help(help_area, buf);
-        self.render_aggregation(aggregation_area, buf);
+        self.render_aggregation(aggregation_area, buf, state);
         self.render_values(values_area, buf);
         self.render_chart(chart_area, buf);
     }
