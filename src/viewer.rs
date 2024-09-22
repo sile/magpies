@@ -23,6 +23,7 @@ const POLL_INTERVAL: Duration = Duration::from_millis(100);
 #[derive(Debug, Clone)]
 pub struct ViewerOptions {
     pub realtime: bool,
+    pub absolute_time: bool,
     pub interval: SecondsNonZeroU64,
     pub chart_time_window: SecondsNonZeroU64,
     pub item_filter: Regex,
@@ -114,6 +115,7 @@ pub struct ViewerApp {
     options: ViewerOptions,
     ts: TimeSeries,
     current_time: SecondsU64,
+    base_time: SecondsU64,
     initialized: bool,
     empty_segment: TimeSeriesSegment,
 }
@@ -124,6 +126,7 @@ impl ViewerApp {
             options: options.clone(),
             ts: TimeSeries::new(options.interval),
             current_time: SecondsU64::new(0),
+            base_time: SecondsU64::new(0),
             initialized: false,
             empty_segment: TimeSeriesSegment::empty(options.interval),
         }
@@ -141,6 +144,10 @@ impl ViewerApp {
                 self.current_time = self.ts.start_time;
             }
             self.initialized = true;
+        }
+
+        if !self.options.absolute_time {
+            self.base_time = self.ts.start_time;
         }
 
         self.ts.sync_state();
@@ -189,8 +196,8 @@ impl ViewerApp {
         let text = vec![
             Line::from(format!(
                 "Time:    {} ~ {}",
-                segment.start_time.get(),
-                segment.end_time.get()
+                segment.start_time.get() - self.base_time.get(),
+                segment.end_time.get() - self.base_time.get(),
             )),
             Line::from(format!("Targets: {}", segment.target_segment_values.len())),
             Line::from(format!("Items:   {}", segment.aggregated_values.len())),

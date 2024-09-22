@@ -16,6 +16,9 @@ pub struct ViewCommand {
     #[clap(short, long)]
     realtime: bool,
 
+    #[clap(short, long)]
+    absolute_time: bool,
+
     #[clap(short, long, default_value = "1")]
     interval: SecondsNonZeroU64,
 
@@ -32,6 +35,7 @@ impl ViewCommand {
         let reader = JsonlReader::new(file);
         let options = ViewerOptions {
             realtime: self.realtime,
+            absolute_time: self.absolute_time,
             interval: self.interval,
             chart_time_window: self.chart_time_window,
             item_filter: self.item_filter,
