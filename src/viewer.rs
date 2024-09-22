@@ -15,7 +15,7 @@ use regex::Regex;
 
 use crate::{
     jsonl::JsonlReader,
-    record::{Record, SecondsNonZeroU64, SecondsU64, TimeSeries},
+    record::{Record, SecondsNonZeroU64, SecondsU64, TimeSeries, TimeSeriesSegment},
 };
 
 const POLL_INTERVAL: Duration = Duration::from_millis(100);
@@ -115,6 +115,7 @@ pub struct ViewerApp {
     ts: TimeSeries,
     current_time: SecondsU64,
     initialized: bool,
+    empty_segment: TimeSeriesSegment,
 }
 
 impl ViewerApp {
@@ -124,6 +125,7 @@ impl ViewerApp {
             ts: TimeSeries::new(options.interval),
             current_time: SecondsU64::new(0),
             initialized: false,
+            empty_segment: TimeSeriesSegment::empty(options.interval),
         }
     }
 
@@ -165,7 +167,16 @@ impl ViewerApp {
         )
     }
 
+    fn current_segment(&self) -> &TimeSeriesSegment {
+        self.ts
+            .segments
+            .get(&self.current_time)
+            .unwrap_or(&self.empty_segment)
+    }
+
     fn render_status(&self, area: Rect, buf: &mut Buffer) {
+        let segment = self.current_segment();
+
         let title = if self.options.realtime {
             Title::from("Status (REALTIME)".bold())
         } else {
@@ -176,9 +187,13 @@ impl ViewerApp {
             .border_set(border::THICK);
 
         let text = vec![
-            Line::from("Time:    ... ~ ..."),
-            Line::from("Targets: 3"),
-            Line::from("Items:   5"),
+            Line::from(format!(
+                "Time:    {} ~ {}",
+                segment.start_time.get(),
+                segment.end_time.get()
+            )),
+            Line::from(format!("Targets: {}", segment.target_segment_values.len())),
+            Line::from(format!("Items:   {}", segment.aggregated_values.len())),
         ];
         Paragraph::new(text)
             .left_aligned()

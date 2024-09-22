@@ -110,6 +110,34 @@ pub enum ItemValue {
     String(String),
 }
 
+impl ItemValue {
+    pub fn is_number(&self) -> bool {
+        matches!(self, Self::Integer(_) | Self::Float(_))
+    }
+
+    pub fn is_integer(&self) -> bool {
+        matches!(self, Self::Integer(_))
+    }
+
+    pub fn as_i64(&self) -> Option<i64> {
+        if let Self::Integer(v) = self {
+            Some(*v)
+        } else {
+            None
+        }
+    }
+
+    pub fn as_f64(&self) -> Option<f64> {
+        if let Self::Integer(v) = self {
+            Some(*v as f64)
+        } else if let Self::Float(v) = self {
+            Some(*v)
+        } else {
+            None
+        }
+    }
+}
+
 impl PartialOrd for ItemValue {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
@@ -153,12 +181,12 @@ fn flatten_json_value(value: &serde_json::Value, key: &mut String, items: &mut I
             items.insert(key.clone(), ItemValue::Bool(*v));
         }
         serde_json::Value::Number(v) => {
-            if let Some(v) = v.as_f64() {
-                items.insert(key.clone(), ItemValue::Float(v));
-            } else if let Some(v) = v.as_i64() {
+            if let Some(v) = v.as_i64() {
                 items.insert(key.clone(), ItemValue::Integer(v));
-            } else if let Some(v) = v.as_u64() {
-                items.insert(key.clone(), ItemValue::Integer(v as i64));
+            } else if let Some(_) = v.as_u64() {
+                items.insert(key.clone(), ItemValue::Integer(i64::MAX));
+            } else if let Some(v) = v.as_f64() {
+                items.insert(key.clone(), ItemValue::Float(v));
             } else {
                 unreachable!();
             }
@@ -222,7 +250,6 @@ impl TimeSeries {
 
         let start_time = record.timestamp.as_secs();
         let start_time = SecondsU64::new(start_time - start_time % self.segment_duration.get());
-        let end_time = SecondsU64::new(start_time.get() + 1);
         if self.segments.is_empty() || start_time < self.start_time {
             self.start_time = start_time;
         }
@@ -232,7 +259,7 @@ impl TimeSeries {
             .entry(start_time)
             .or_insert_with(|| TimeSeriesSegment {
                 start_time,
-                end_time,
+                end_time: SecondsU64::new(start_time.get() + self.segment_duration.get()),
                 aggregated_values: BTreeMap::new(),
                 target_segment_values: BTreeMap::new(),
             });
@@ -259,8 +286,12 @@ impl TimeSeries {
     }
 
     pub fn sync_state(&mut self) {
+        let empty_segment = TimeSeriesSegment::empty(self.segment_duration);
         for start_time in std::mem::take(&mut self.dirty_segments) {
-            //
+            let prev_segment = self.segments.get(&start_time).unwrap_or(&empty_segment);
+            let mut segment = self.segments.get(&start_time).expect("unreachable").clone();
+            segment.sync_state(prev_segment);
+            self.segments.insert(start_time, segment);
         }
     }
 }
@@ -273,21 +304,166 @@ pub struct TimeSeriesSegment {
     pub target_segment_values: BTreeMap<String, BTreeMap<String, SegmentValue>>,
 }
 
+impl TimeSeriesSegment {
+    pub fn empty(segment_duration: SecondsNonZeroU64) -> Self {
+        Self {
+            start_time: SecondsU64::new(0),
+            end_time: SecondsU64::new(segment_duration.get()),
+            aggregated_values: BTreeMap::new(),
+            target_segment_values: BTreeMap::new(),
+        }
+    }
+
+    fn sync_state(&mut self, prev_segment: &Self) {
+        self.sync_target_segment_values(prev_segment);
+        self.sync_aggregated_values(prev_segment);
+    }
+
+    fn sync_target_segment_values(&mut self, prev_segment: &Self) {
+        for (target, segment_values) in &mut self.target_segment_values {
+            for (key, segment_value) in segment_values {
+                segment_value.sync_representative_value();
+                if let Some(prev_segment_value) = prev_segment
+                    .target_segment_values
+                    .get(target)
+                    .and_then(|v| v.get(key))
+                {
+                    segment_value.sync_delta(prev_segment_value);
+                }
+            }
+        }
+    }
+
+    fn sync_aggregated_values(&mut self, prev_segment: &Self) {
+        for (key, aggregated_value) in &mut self.aggregated_values {
+            let mut sum = None;
+            for value in self
+                .target_segment_values
+                .values()
+                .filter_map(|segment_values| segment_values.get(key).map(|v| &v.value))
+            {
+                match (value, sum) {
+                    (value, None) => {
+                        sum = Some(value.clone());
+                    }
+                    (RepresentativeValue::Avg(_), Some(RepresentativeValue::Set(_))) => {
+                        sum = None;
+                        continue;
+                    }
+                    (RepresentativeValue::Set(_), Some(RepresentativeValue::Avg(_))) => {
+                        sum = None;
+                        continue;
+                    }
+                    (RepresentativeValue::Avg(a), Some(RepresentativeValue::Avg(b))) => {
+                        if let Some(v) = number_add(a.clone(), b.clone()) {
+                            sum = Some(RepresentativeValue::Avg(v));
+                        } else {
+                            sum = None;
+                            continue;
+                        }
+                    }
+                    (RepresentativeValue::Set(a), Some(RepresentativeValue::Set(mut b))) => {
+                        b.extend(a.iter().cloned());
+                        sum = Some(RepresentativeValue::Set(b));
+                    }
+                }
+            }
+            aggregated_value.sum = sum;
+
+            let Some(RepresentativeValue::Avg(v0)) = prev_segment
+                .aggregated_values
+                .get(key)
+                .and_then(|v| v.sum.as_ref())
+            else {
+                continue;
+            };
+            let Some(RepresentativeValue::Avg(v1)) = &aggregated_value.sum else {
+                continue;
+            };
+            aggregated_value.delta = number_sub(v1.clone(), v0.clone());
+        }
+    }
+}
+
+fn number_sub(a: serde_json::Number, b: serde_json::Number) -> Option<serde_json::Number> {
+    apply_number_op(a, b, |a, b| a - b, |a, b| a - b)
+}
+
+fn number_add(a: serde_json::Number, b: serde_json::Number) -> Option<serde_json::Number> {
+    apply_number_op(a, b, |a, b| a + b, |a, b| a + b)
+}
+
+fn apply_number_op<F0, F1>(
+    a: serde_json::Number,
+    b: serde_json::Number,
+    f0: F0,
+    f1: F1,
+) -> Option<serde_json::Number>
+where
+    F0: FnOnce(i64, i64) -> i64,
+    F1: FnOnce(f64, f64) -> f64,
+{
+    if let (Some(v0), Some(v1)) = (a.as_i64(), b.as_i64()) {
+        Some(serde_json::Number::from(f0(v0, v1)))
+    } else if let (Some(v0), Some(v1)) = (a.as_f64(), b.as_f64()) {
+        serde_json::Number::from_f64(f1(v0, v1))
+    } else {
+        None
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct AggregatedValue {
-    pub sum: Option<serde_json::Number>,
+    pub sum: Option<RepresentativeValue>,
     pub delta: Option<serde_json::Number>,
 }
 
 #[derive(Debug, Default, Clone)]
 pub struct SegmentValue {
-    pub value: Option<RepresentativeValue>,
+    pub value: RepresentativeValue,
     pub delta: Option<serde_json::Number>,
     pub raw_values: Vec<ItemValue>,
+}
+
+impl SegmentValue {
+    fn sync_representative_value(&mut self) {
+        if self.raw_values.iter().all(|v| v.is_integer()) {
+            let sum: i64 = self.raw_values.iter().filter_map(|v| v.as_i64()).sum();
+            let avg = sum / self.raw_values.len() as i64;
+            self.value = RepresentativeValue::Avg(serde_json::Number::from(avg));
+            return;
+        } else if self.raw_values.iter().all(|v| v.is_number()) {
+            let sum: f64 = self.raw_values.iter().filter_map(|v| v.as_f64()).sum();
+            let avg = sum / self.raw_values.len() as f64;
+            if let Some(v) = serde_json::Number::from_f64(avg) {
+                self.value = RepresentativeValue::Avg(v);
+                return;
+            }
+        }
+
+        self.value = RepresentativeValue::Set(self.raw_values.iter().cloned().collect());
+    }
+
+    fn sync_delta(&mut self, prev: &Self) {
+        let RepresentativeValue::Avg(v0) = &self.value else {
+            return;
+        };
+        let RepresentativeValue::Avg(v1) = &prev.value else {
+            return;
+        };
+
+        self.delta = number_sub(v0.clone(), v1.clone());
+    }
 }
 
 #[derive(Debug, Clone)]
 pub enum RepresentativeValue {
     Avg(serde_json::Number),
     Set(BTreeSet<ItemValue>),
+}
+
+impl Default for RepresentativeValue {
+    fn default() -> Self {
+        Self::Set(BTreeSet::new())
+    }
 }
