@@ -139,7 +139,7 @@ impl ViewerApp {
     fn sync_state(&mut self) {
         if !self.initialized {
             if self.options.realtime {
-                self.current_time = self.ts.last_time();
+                self.current_time = self.ts.last_start_time();
             } else {
                 self.current_time = self.ts.start_time;
             }
@@ -151,6 +151,10 @@ impl ViewerApp {
         }
 
         self.ts.sync_state();
+
+        if self.options.realtime && self.current_time < self.ts.last_start_time() {
+            self.current_time = self.ts.last_start_time();
+        }
     }
 
     fn calculate_layout(&self, area: Rect) -> (Rect, Rect, Rect, Rect, Rect) {
@@ -184,23 +188,28 @@ impl ViewerApp {
     fn render_status(&self, area: Rect, buf: &mut Buffer) {
         let segment = self.current_segment();
 
-        let title = if self.options.realtime {
-            Title::from("Status (REALTIME)".bold())
-        } else {
-            Title::from("Status".bold())
-        };
+        let title = Title::from("Status".bold());
         let block = Block::bordered()
             .title(title.alignment(Alignment::Left))
             .border_set(border::THICK);
 
         let text = vec![
             Line::from(format!(
-                "Time:    {} ~ {}",
-                segment.start_time.get() - self.base_time.get(),
-                segment.end_time.get() - self.base_time.get(),
+                "Time:    {} ~ {} (between {} ~ {})",
+                fmt_u64(segment.start_time.get() - self.base_time.get()),
+                fmt_u64(segment.end_time.get().min(self.ts.end_time.get()) - self.base_time.get()),
+                fmt_u64(self.ts.start_time.get() - self.base_time.get()),
+                fmt_u64(self.ts.end_time.get() - self.base_time.get()),
             )),
-            Line::from(format!("Targets: {}", segment.target_segment_values.len())),
-            Line::from(format!("Items:   {}", segment.aggregated_values.len())),
+            Line::from(format!(
+                "Targets: {}",
+                fmt_u64(segment.target_segment_values.len() as u64)
+            )),
+            Line::from(format!(
+                "Items:   {} (filter={})",
+                fmt_u64(segment.aggregated_values.len() as u64),
+                self.options.item_filter
+            )),
         ];
         Paragraph::new(text)
             .left_aligned()
@@ -223,7 +232,9 @@ impl ViewerApp {
             .render(header_area, buf);
     }
 
-    fn render_aggregation(&self, _area: Rect, _buf: &mut Buffer) {}
+    fn render_aggregation(&self, _area: Rect, _buf: &mut Buffer) {
+        //
+    }
 
     fn render_values(&self, _area: Rect, _buf: &mut Buffer) {}
 
@@ -240,4 +251,24 @@ impl Widget for &ViewerApp {
         self.render_values(values_area, buf);
         self.render_chart(chart_area, buf);
     }
+}
+
+fn fmt_u64(mut n: u64) -> String {
+    if n == 0 {
+        return n.to_string();
+    }
+
+    let mut s = Vec::new();
+    let mut i = 0;
+    while n > 0 {
+        if i > 0 && i % 3 == 0 {
+            s.push(',');
+        }
+        let d = (n % 10) as u8;
+        s.push(char::from(b'0' + d));
+        n /= 10;
+        i += 1;
+    }
+    s.reverse();
+    s.into_iter().collect()
 }

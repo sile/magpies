@@ -226,6 +226,7 @@ pub type Items = BTreeMap<String, ItemValue>;
 #[derive(Debug, Clone)]
 pub struct TimeSeries {
     pub start_time: SecondsU64,
+    pub end_time: SecondsU64,
     pub segment_duration: SecondsNonZeroU64,
     pub segments: BTreeMap<SecondsU64, TimeSeriesSegment>,
     pub dirty_segments: BTreeSet<SecondsU64>,
@@ -235,6 +236,7 @@ impl TimeSeries {
     pub fn new(segment_duration: SecondsNonZeroU64) -> Self {
         Self {
             start_time: SecondsU64::new(0),
+            end_time: SecondsU64::new(0),
             segment_duration,
             segments: BTreeMap::new(),
             dirty_segments: BTreeSet::new(),
@@ -249,6 +251,8 @@ impl TimeSeries {
         let record = record.flatten();
 
         let start_time = record.timestamp.as_secs();
+        self.end_time = self.end_time.max(SecondsU64::new(start_time + 1));
+
         let start_time = SecondsU64::new(start_time - start_time % self.segment_duration.get());
         if self.segments.is_empty() || start_time < self.start_time {
             self.start_time = start_time;
@@ -278,7 +282,7 @@ impl TimeSeries {
         self.dirty_segments.insert(start_time);
     }
 
-    pub fn last_time(&self) -> SecondsU64 {
+    pub fn last_start_time(&self) -> SecondsU64 {
         self.segments
             .last_key_value()
             .map(|x| *x.0)
