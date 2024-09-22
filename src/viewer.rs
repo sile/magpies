@@ -129,49 +129,57 @@ impl Viewer {
                 need_redraw = true;
             }
             KeyCode::Right => {
+                self.app.in_agg_table = false;
                 need_redraw = true;
             }
             KeyCode::Left => {
+                self.app.in_agg_table = true;
                 need_redraw = true;
             }
             KeyCode::Up => {
-                self.widget_state.agg_table.scroll_up_by(1);
-                if let Some(i) = self.widget_state.agg_table.selected() {
-                    self.widget_state.agg_table_scroll =
-                        self.widget_state.agg_table_scroll.position(i);
-                }
+                self.move_cursor(-1);
                 need_redraw = true;
             }
             KeyCode::Down => {
-                self.widget_state.agg_table.scroll_down_by(1);
-                if let Some(i) = self.widget_state.agg_table.selected() {
-                    self.widget_state.agg_table_scroll =
-                        self.widget_state.agg_table_scroll.position(i);
-                }
+                self.move_cursor(1);
                 need_redraw = true;
             }
             KeyCode::PageUp => {
-                let n = self.widget_state.agg_table_height.saturating_sub(4).max(1);
-                self.widget_state.agg_table.scroll_up_by(n);
-                if let Some(i) = self.widget_state.agg_table.selected() {
-                    self.widget_state.agg_table_scroll =
-                        self.widget_state.agg_table_scroll.position(i);
-                }
+                let n = self.widget_state.agg_table_height.saturating_sub(4).max(1) as i16;
+                self.move_cursor(-n);
                 need_redraw = true;
             }
             KeyCode::PageDown => {
-                let n = self.widget_state.agg_table_height.saturating_sub(4).max(1);
-                self.widget_state.agg_table.scroll_down_by(n);
-                if let Some(i) = self.widget_state.agg_table.selected() {
-                    self.widget_state.agg_table_scroll =
-                        self.widget_state.agg_table_scroll.position(i);
-                }
+                let n = self.widget_state.agg_table_height.saturating_sub(4).max(1) as i16;
+                self.move_cursor(n);
                 need_redraw = true;
             }
             _ => {}
         }
 
         Ok(need_redraw)
+    }
+
+    fn move_cursor(&mut self, delta: i16) {
+        let (table, scroll) = if self.app.in_agg_table {
+            (
+                &mut self.widget_state.agg_table,
+                &mut self.widget_state.agg_table_scroll,
+            )
+        } else {
+            (
+                &mut self.widget_state.values_table,
+                &mut self.widget_state.values_table_scroll,
+            )
+        };
+        if delta < 0 {
+            table.scroll_up_by(delta.abs() as u16);
+        } else {
+            table.scroll_down_by(delta as u16);
+        }
+        *scroll = scroll
+            .clone()
+            .position(table.selected().unwrap_or_default());
     }
 }
 
@@ -186,6 +194,8 @@ pub struct ViewerWidgetState {
     agg_table: TableState,
     agg_table_scroll: ScrollbarState,
     agg_table_height: u16,
+    values_table: TableState,
+    values_table_scroll: ScrollbarState,
 }
 
 impl ViewerWidgetState {
@@ -194,6 +204,8 @@ impl ViewerWidgetState {
             agg_table: TableState::default().with_selected(0),
             agg_table_scroll: ScrollbarState::new(0),
             agg_table_height: 0,
+            values_table: TableState::default().with_selected(0),
+            values_table_scroll: ScrollbarState::new(0),
         }
     }
 }
@@ -207,6 +219,7 @@ pub struct ViewerApp {
     initialized: bool,
     empty_segment: TimeSeriesSegment,
     tail: bool,
+    in_agg_table: bool,
 }
 
 impl ViewerApp {
@@ -219,6 +232,7 @@ impl ViewerApp {
             initialized: false,
             empty_segment: TimeSeriesSegment::empty(options.interval),
             tail: false,
+            in_agg_table: true,
         }
     }
 
@@ -418,7 +432,11 @@ impl ViewerApp {
         )
         .header(header)
         .column_spacing(1)
-        .highlight_style(Style::new().reversed())
+        .highlight_style(if self.in_agg_table {
+            Style::new().reversed()
+        } else {
+            Style::new()
+        })
         .block(block);
         ratatui::widgets::StatefulWidget::render(table, area, buf, &mut state.agg_table);
 
@@ -439,8 +457,23 @@ impl ViewerApp {
         state.agg_table_height = area.height;
     }
 
-    fn render_values(&self, area: Rect, buf: &mut Buffer) {
-        let title = Title::from("Values of ...".bold());
+    fn selected_item_key(&self, state: &ViewerWidgetState) -> Option<&str> {
+        let segment = self.current_segment();
+        state
+            .agg_table
+            .selected()
+            .and_then(|i| segment.aggregated_values.keys().nth(i).map(|k| k.as_str()))
+    }
+
+    fn render_values(&self, area: Rect, buf: &mut Buffer, state: &mut ViewerWidgetState) {
+        //let segment = self.current_segment();
+        let key = self.selected_item_key(state);
+        let title = if let Some(key) = key {
+            Title::from(format!("Values of {key:?}").bold())
+        } else {
+            Title::from("Values".bold())
+        };
+
         let block = Block::bordered()
             .title(title.alignment(Alignment::Left))
             .border_set(border::THICK);
@@ -471,7 +504,7 @@ impl ratatui::widgets::StatefulWidget for &ViewerApp {
         self.render_status(status_area, buf);
         self.render_help(help_area, buf);
         self.render_aggregation(aggregation_area, buf, state);
-        self.render_values(values_area, buf);
+        self.render_values(values_area, buf, state);
         self.render_chart(chart_area, buf);
     }
 }
