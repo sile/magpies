@@ -164,11 +164,27 @@ impl ViewerApp {
             .block(block)
             .render(header_area, buf);
     }
+
+    fn render_help(&self, area: Rect, buf: &mut Buffer) {
+        let title = Title::from("Help".bold());
+        let block = Block::bordered()
+            .title(title.alignment(Alignment::Left))
+            .border_set(border::THICK);
+        let main_layout = Layout::vertical([Constraint::Length(5), Constraint::Min(0)]);
+        let [header_area, _main_area] = main_layout.areas(area);
+
+        let text = vec![Line::from(vec!["Quit: ".into(), "<Q>".blue().bold()])];
+        Paragraph::new(text)
+            .left_aligned()
+            .block(block)
+            .render(header_area, buf);
+    }
 }
 
 impl Widget for &ViewerApp {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let (status_area, help_area, main_area) = self.calculate_layout(area);
         self.render_status(status_area, buf);
+        self.render_help(help_area, buf);
     }
 }
