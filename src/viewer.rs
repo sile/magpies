@@ -5,10 +5,10 @@ use orfail::OrFail;
 use ratatui::{
     layout::{Alignment, Constraint, Layout},
     prelude::{Buffer, Rect},
-    style::Stylize,
+    style::{Style, Stylize},
     symbols::border,
-    text::Line,
-    widgets::{block::Title, Block, Paragraph, Widget},
+    text::{Line, Text},
+    widgets::{block::Title, Block, Cell, Paragraph, Row, Table, TableState, Widget},
     DefaultTerminal,
 };
 use regex::Regex;
@@ -25,6 +25,7 @@ pub struct ViewerOptions {
     pub absolute_time: bool,
     pub interval: SecondsNonZeroU64,
     pub chart_time_window: SecondsNonZeroU64,
+    pub decimal_places: u8,
     pub item_filter: Regex,
 }
 
@@ -113,6 +114,7 @@ pub struct ViewerApp {
     base_time: SecondsU64,
     initialized: bool,
     empty_segment: TimeSeriesSegment,
+    agg_table_state: TableState,
 }
 
 impl ViewerApp {
@@ -124,6 +126,7 @@ impl ViewerApp {
             base_time: SecondsU64::new(0),
             initialized: false,
             empty_segment: TimeSeriesSegment::empty(options.interval),
+            agg_table_state: TableState::default().with_selected(0),
         }
     }
 
@@ -197,7 +200,9 @@ impl ViewerApp {
             Line::from(format!(
                 "Time:    {} ~ {} (between {} ~ {})",
                 fmt_u64(segment.start_time.get() - self.base_time.get()),
-                fmt_u64(segment.end_time.get().min(self.ts.end_time.get()) - self.base_time.get()),
+                fmt_u64(
+                    segment.end_time().get().min(self.ts.end_time.get()) - self.base_time.get()
+                ),
                 fmt_u64(self.ts.start_time.get() - self.base_time.get()),
                 fmt_u64(self.ts.end_time.get() - self.base_time.get()),
             )),
@@ -225,15 +230,51 @@ impl ViewerApp {
         let main_layout = Layout::vertical([Constraint::Length(5), Constraint::Min(0)]);
         let [header_area, _main_area] = main_layout.areas(area);
 
-        let text = vec![Line::from(vec!["Quit: ".into(), "<Q>".blue().bold()])];
+        let text = vec![Line::from(vec!["Quit: ".into(), "<Q>".bold()])];
         Paragraph::new(text)
             .left_aligned()
             .block(block)
             .render(header_area, buf);
     }
 
-    fn render_aggregation(&self, _area: Rect, _buf: &mut Buffer) {
-        //
+    fn render_aggregation(&self, area: Rect, buf: &mut Buffer) {
+        let segment = self.current_segment();
+
+        let title = Title::from("Aggregated Items".bold());
+        let block = Block::bordered()
+            .title(title.alignment(Alignment::Left))
+            .border_set(border::THICK);
+
+        let header = ["Name", "Sum", "Delta/s"]
+            .into_iter()
+            .map(|t| Cell::from(Text::from(t).centered()))
+            .collect::<Row>()
+            .style(Style::default().bold())
+            .height(1);
+        let rows = segment.aggregated_values.iter().map(|(name, agg_value)| {
+            [
+                Cell::from(Text::from(name.clone())),
+                Cell::from(
+                    Text::from(agg_value.sum_text(self.options.decimal_places)).right_aligned(),
+                ),
+                Cell::from(
+                    Text::from(agg_value.delta_text(self.options.decimal_places)).right_aligned(),
+                ),
+            ]
+            .into_iter()
+            .collect::<Row>()
+        });
+        Table::new(
+            rows,
+            [
+                Constraint::Percentage(60),
+                Constraint::Percentage(25),
+                Constraint::Percentage(15),
+            ],
+        )
+        .header(header)
+        .block(block)
+        .render(area, buf);
     }
 
     fn render_values(&self, _area: Rect, _buf: &mut Buffer) {}
@@ -253,7 +294,8 @@ impl Widget for &ViewerApp {
     }
 }
 
-fn fmt_u64(mut n: u64) -> String {
+// TODO
+pub fn fmt_u64(mut n: u64) -> String {
     if n == 0 {
         return n.to_string();
     }
@@ -270,5 +312,39 @@ fn fmt_u64(mut n: u64) -> String {
         i += 1;
     }
     s.reverse();
+    s.into_iter().collect()
+}
+
+pub fn fmt_i64(n: i64) -> String {
+    if n < 0 {
+        format!("-{}", fmt_u64(n.abs() as u64))
+    } else {
+        fmt_u64(n.abs() as u64)
+    }
+}
+
+pub fn fmt_f64(n: f64, decimal_places: usize) -> String {
+    let s = format!("{:.1$}", n, decimal_places);
+    let mut iter = s.splitn(2, '.');
+    let integer = iter.next().expect("unreachable");
+    let fraction = iter.next().expect("unreachable");
+
+    let mut s = Vec::new();
+    for (i, c) in integer.chars().rev().enumerate() {
+        if c != '-' && i > 0 && i % 3 == 0 {
+            s.push(',');
+        }
+        s.push(c);
+    }
+    s.reverse();
+
+    s.push('.');
+    for (i, c) in fraction.chars().enumerate() {
+        if i > 0 && i % 3 == 0 {
+            s.push(',');
+        }
+        s.push(c);
+    }
+
     s.into_iter().collect()
 }

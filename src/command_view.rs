@@ -22,6 +22,9 @@ pub struct ViewCommand {
     #[clap(short = 'w', long, default_value = "60")]
     chart_time_window: SecondsNonZeroU64,
 
+    #[clap(short, long, default_value_t = 3)]
+    decimal_places: u8,
+
     #[clap(short = 'f', long, default_value = ".*")]
     item_filter: Regex,
 }
@@ -34,6 +37,7 @@ impl ViewCommand {
             absolute_time: self.absolute_time,
             interval: self.interval,
             chart_time_window: self.chart_time_window,
+            decimal_places: self.decimal_places,
             item_filter: self.item_filter,
         };
         let app = Viewer::new(reader, options).or_fail()?;

@@ -8,6 +8,8 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
+use crate::viewer::{fmt_f64, fmt_i64};
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Record {
     pub target: String,
@@ -101,7 +103,8 @@ pub struct FlattenedRecord {
     pub items: Items,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged, rename_all = "snake_case")]
 pub enum ItemValue {
     Null,
     Bool(bool),
@@ -201,7 +204,7 @@ fn flatten_json_value(value: &serde_json::Value, key: &mut String, items: &mut I
                 if !key.is_empty() {
                     key.push('.');
                 }
-                println!("{i:0width$}");
+                key.push_str(&format!("{i:0width$}"));
                 flatten_json_value(value, key, items);
                 key.truncate(len);
             }
@@ -263,7 +266,7 @@ impl TimeSeries {
             .entry(start_time)
             .or_insert_with(|| TimeSeriesSegment {
                 start_time,
-                end_time: SecondsU64::new(start_time.get() + self.segment_duration.get()),
+                segment_duration: self.segment_duration,
                 aggregated_values: BTreeMap::new(),
                 target_segment_values: BTreeMap::new(),
             });
@@ -303,7 +306,7 @@ impl TimeSeries {
 #[derive(Debug, Clone)]
 pub struct TimeSeriesSegment {
     pub start_time: SecondsU64,
-    pub end_time: SecondsU64,
+    pub segment_duration: SecondsNonZeroU64,
     pub aggregated_values: BTreeMap<String, AggregatedValue>,
     pub target_segment_values: BTreeMap<String, BTreeMap<String, SegmentValue>>,
 }
@@ -312,10 +315,14 @@ impl TimeSeriesSegment {
     pub fn empty(segment_duration: SecondsNonZeroU64) -> Self {
         Self {
             start_time: SecondsU64::new(0),
-            end_time: SecondsU64::new(segment_duration.get()),
+            segment_duration,
             aggregated_values: BTreeMap::new(),
             target_segment_values: BTreeMap::new(),
         }
+    }
+
+    pub fn end_time(&self) -> SecondsU64 {
+        SecondsU64::new(self.start_time.get() + self.segment_duration.get())
     }
 
     fn sync_state(&mut self, prev_segment: &Self) {
@@ -332,7 +339,7 @@ impl TimeSeriesSegment {
                     .get(target)
                     .and_then(|v| v.get(key))
                 {
-                    segment_value.sync_delta(prev_segment_value);
+                    segment_value.sync_delta(prev_segment_value, self.segment_duration);
                 }
             }
         }
@@ -385,7 +392,7 @@ impl TimeSeriesSegment {
                 .and_then(|v| v.sum.as_ref())
             {
                 if let Some(RepresentativeValue::Avg(v1)) = &sum {
-                    delta = number_sub(v1.clone(), v0.clone());
+                    delta = number_delta(v1.clone(), v0.clone(), self.segment_duration);
                 }
             }
             self.aggregated_values
@@ -394,8 +401,13 @@ impl TimeSeriesSegment {
     }
 }
 
-fn number_sub(a: serde_json::Number, b: serde_json::Number) -> Option<serde_json::Number> {
-    apply_number_op(a, b, |a, b| a - b, |a, b| a - b)
+fn number_delta(
+    a: serde_json::Number,
+    b: serde_json::Number,
+    d: SecondsNonZeroU64,
+) -> Option<serde_json::Number> {
+    let d = d.get();
+    apply_number_op(a, b, |a, b| (a - b) / d as i64, |a, b| (a - b) / d as f64)
 }
 
 fn number_add(a: serde_json::Number, b: serde_json::Number) -> Option<serde_json::Number> {
@@ -427,6 +439,39 @@ pub struct AggregatedValue {
     pub delta: Option<serde_json::Number>,
 }
 
+impl AggregatedValue {
+    pub fn sum_text(&self, decimal_places: u8) -> String {
+        let Some(v) = &self.sum else {
+            return "".to_owned();
+        };
+        match v {
+            RepresentativeValue::Avg(v) => {
+                if let Some(v) = v.as_i64() {
+                    fmt_i64(v)
+                } else if let Some(v) = v.as_f64() {
+                    fmt_f64(v, decimal_places as usize)
+                } else {
+                    unreachable!()
+                }
+            }
+            RepresentativeValue::Set(vs) => serde_json::to_string(vs).expect("unreachable"),
+        }
+    }
+
+    pub fn delta_text(&self, decimal_places: u8) -> String {
+        let Some(v) = &self.delta else {
+            return "".to_owned();
+        };
+        if let Some(v) = v.as_i64() {
+            fmt_i64(v)
+        } else if let Some(v) = v.as_f64() {
+            fmt_f64(v, decimal_places as usize)
+        } else {
+            unreachable!()
+        }
+    }
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct SegmentValue {
     pub value: RepresentativeValue,
@@ -453,7 +498,7 @@ impl SegmentValue {
         self.value = RepresentativeValue::Set(self.raw_values.iter().cloned().collect());
     }
 
-    fn sync_delta(&mut self, prev: &Self) {
+    fn sync_delta(&mut self, prev: &Self, segment_duration: SecondsNonZeroU64) {
         let RepresentativeValue::Avg(v0) = &self.value else {
             return;
         };
@@ -461,7 +506,7 @@ impl SegmentValue {
             return;
         };
 
-        self.delta = number_sub(v0.clone(), v1.clone());
+        self.delta = number_delta(v0.clone(), v1.clone(), segment_duration);
     }
 }
 
