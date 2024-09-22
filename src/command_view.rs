@@ -5,7 +5,7 @@ use regex::Regex;
 
 use crate::{
     jsonl::JsonlReader,
-    record::SecondsU64,
+    record::SecondsNonZeroU64,
     viewer::{Viewer, ViewerOptions},
 };
 
@@ -17,10 +17,10 @@ pub struct ViewCommand {
     realtime: bool,
 
     #[clap(short, long, default_value = "1")]
-    interval: SecondsU64,
+    interval: SecondsNonZeroU64,
 
     #[clap(short = 'w', long, default_value = "60")]
-    chart_time_window: SecondsU64,
+    chart_time_window: SecondsNonZeroU64,
 
     #[clap(short = 'f', long, default_value = ".*")]
     item_filter: Regex,

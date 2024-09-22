@@ -1,6 +1,6 @@
 use std::{
     collections::BTreeMap,
-    num::ParseIntError,
+    num::{NonZeroU64, ParseIntError},
     str::FromStr,
     time::{Duration, UNIX_EPOCH},
 };
@@ -63,6 +63,32 @@ impl FromStr for SecondsU64 {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let v: u64 = s.parse()?;
+        Ok(Self(v))
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct SecondsNonZeroU64(NonZeroU64);
+
+impl SecondsNonZeroU64 {
+    pub const fn new(seconds: NonZeroU64) -> Self {
+        Self(seconds)
+    }
+
+    pub const fn get(self) -> u64 {
+        self.0.get()
+    }
+
+    pub const fn to_duration(self) -> Duration {
+        Duration::from_secs(self.0.get())
+    }
+}
+
+impl FromStr for SecondsNonZeroU64 {
+    type Err = ParseIntError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let v: NonZeroU64 = s.parse()?;
         Ok(Self(v))
     }
 }
@@ -135,15 +161,15 @@ pub type Items = BTreeMap<String, ItemValue>;
 
 #[derive(Debug, Clone)]
 pub struct TimeSeries {
-    pub start_time: Duration,
-    pub segment_duration: Duration,
+    pub start_time: SecondsU64,
+    pub segment_duration: SecondsU64,
     pub segments: Vec<TimeSeriesSegment>,
 }
 
 impl TimeSeries {
-    pub fn new(segment_duration: Duration) -> Self {
+    pub fn new(segment_duration: SecondsU64) -> Self {
         Self {
-            start_time: Duration::ZERO,
+            start_time: SecondsU64::new(0),
             segment_duration,
             segments: Vec::new(),
         }
@@ -151,8 +177,10 @@ impl TimeSeries {
 
     pub fn insert(&mut self, record: &Record) {
         let record = record.flatten();
-        if self.segments.is_empty() || record.timestamp < self.start_time {
-            self.start_time = record.timestamp;
+
+        if self.segments.is_empty() || record.timestamp.as_secs() < self.start_time.get() {
+            let timestamp = record.timestamp.as_secs();
+            self.start_time = SecondsU64::new(timestamp - timestamp % self.segment_duration.get());
         }
     }
 }
