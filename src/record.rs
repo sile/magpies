@@ -335,7 +335,12 @@ impl TimeSeriesSegment {
     }
 
     fn sync_aggregated_values(&mut self, prev_segment: &Self) {
-        for (key, aggregated_value) in &mut self.aggregated_values {
+        let keys = self
+            .target_segment_values
+            .values()
+            .flat_map(|segment_values| segment_values.keys())
+            .collect::<BTreeSet<_>>();
+        for key in keys {
             let mut sum = None;
             for value in self
                 .target_segment_values
@@ -348,18 +353,18 @@ impl TimeSeriesSegment {
                     }
                     (RepresentativeValue::Avg(_), Some(RepresentativeValue::Set(_))) => {
                         sum = None;
-                        continue;
+                        break;
                     }
                     (RepresentativeValue::Set(_), Some(RepresentativeValue::Avg(_))) => {
                         sum = None;
-                        continue;
+                        break;
                     }
                     (RepresentativeValue::Avg(a), Some(RepresentativeValue::Avg(b))) => {
                         if let Some(v) = number_add(a.clone(), b.clone()) {
                             sum = Some(RepresentativeValue::Avg(v));
                         } else {
                             sum = None;
-                            continue;
+                            break;
                         }
                     }
                     (RepresentativeValue::Set(a), Some(RepresentativeValue::Set(mut b))) => {
@@ -368,19 +373,19 @@ impl TimeSeriesSegment {
                     }
                 }
             }
-            aggregated_value.sum = sum;
 
-            let Some(RepresentativeValue::Avg(v0)) = prev_segment
+            let mut delta = None;
+            if let Some(RepresentativeValue::Avg(v0)) = prev_segment
                 .aggregated_values
                 .get(key)
                 .and_then(|v| v.sum.as_ref())
-            else {
-                continue;
-            };
-            let Some(RepresentativeValue::Avg(v1)) = &aggregated_value.sum else {
-                continue;
-            };
-            aggregated_value.delta = number_sub(v1.clone(), v0.clone());
+            {
+                if let Some(RepresentativeValue::Avg(v1)) = &sum {
+                    delta = number_sub(v1.clone(), v0.clone());
+                }
+            }
+            self.aggregated_values
+                .insert(key.clone(), AggregatedValue { sum, delta });
         }
     }
 }
