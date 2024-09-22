@@ -90,13 +90,35 @@ impl Viewer {
     }
 
     fn handle_key_event(&mut self, key: KeyEvent) -> orfail::Result<bool> {
+        let mut need_redraw = false;
         if key.kind != KeyEventKind::Press {
-            return Ok(false);
+            return Ok(need_redraw);
         }
-        if key.code == KeyCode::Char('q') {
-            self.exit = true;
+
+        match key.code {
+            KeyCode::Char('q') => {
+                self.exit = true;
+            }
+            KeyCode::Char('p') => {
+                self.app.go_to_prev_time();
+                need_redraw = true;
+            }
+            KeyCode::Char('n') => {
+                self.app.go_to_next_time();
+                need_redraw = true;
+            }
+            KeyCode::Char('s') => {
+                self.app.go_to_start_time();
+                need_redraw = true;
+            }
+            KeyCode::Char('e') => {
+                self.app.go_to_end_time();
+                need_redraw = true;
+            }
+            _ => {}
         }
-        Ok(false)
+
+        Ok(need_redraw)
     }
 }
 
@@ -114,6 +136,7 @@ pub struct ViewerApp {
     base_time: SecondsU64,
     initialized: bool,
     empty_segment: TimeSeriesSegment,
+    tail: bool,
     agg_table_state: TableState,
 }
 
@@ -126,12 +149,45 @@ impl ViewerApp {
             base_time: SecondsU64::new(0),
             initialized: false,
             empty_segment: TimeSeriesSegment::empty(options.interval),
+            tail: false,
             agg_table_state: TableState::default().with_selected(0),
         }
     }
 
     fn insert_record(&mut self, record: &Record) {
         self.ts.insert(record);
+    }
+
+    fn go_to_prev_time(&mut self) {
+        self.current_time = SecondsU64::new(
+            self.current_time
+                .get()
+                .saturating_sub(self.options.interval.get()),
+        )
+        .max(self.ts.start_time);
+        if self.ts.start_time != self.ts.last_start_time() {
+            self.tail = false;
+        }
+    }
+
+    fn go_to_next_time(&mut self) {
+        self.current_time = SecondsU64::new(self.current_time.get() + self.options.interval.get())
+            .min(self.ts.last_start_time());
+        if self.current_time == self.ts.last_start_time() {
+            self.tail = true;
+        }
+    }
+
+    fn go_to_start_time(&mut self) {
+        self.current_time = self.ts.start_time;
+        if self.ts.start_time != self.ts.last_start_time() {
+            self.tail = false;
+        }
+    }
+
+    fn go_to_end_time(&mut self) {
+        self.current_time = self.ts.last_start_time();
+        self.tail = true;
     }
 
     fn sync_state(&mut self) {
@@ -150,13 +206,15 @@ impl ViewerApp {
 
         self.ts.sync_state();
 
-        let prev_last_start_time = self
-            .ts
-            .last_start_time()
-            .get()
-            .checked_sub(self.options.interval.get());
-        if Some(self.current_time.get()) == prev_last_start_time {
-            self.current_time = self.ts.last_start_time();
+        if self.tail {
+            let prev_last_start_time = self
+                .ts
+                .last_start_time()
+                .get()
+                .checked_sub(self.options.interval.get());
+            if Some(self.current_time.get()) == prev_last_start_time {
+                self.current_time = self.ts.last_start_time();
+            }
         }
     }
 
@@ -284,9 +342,9 @@ impl ViewerApp {
         Table::new(
             rows,
             [
-                Constraint::Percentage(60),
+                Constraint::Percentage(50),
                 Constraint::Percentage(25),
-                Constraint::Percentage(15),
+                Constraint::Percentage(25),
             ],
         )
         .header(header)
