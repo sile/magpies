@@ -4,7 +4,7 @@ use orfail::OrFail;
 
 use crate::{
     jsonl::JsonlReader,
-    viewer::{ViewerApp, ViewerOptions},
+    viewer::{Viewer, ViewerOptions},
 };
 
 #[derive(Debug, clap::Args)]
@@ -22,7 +22,7 @@ impl ViewCommand {
         let options = ViewerOptions {
             realtime: self.realtime,
         };
-        let app = ViewerApp::new(reader, options).or_fail()?;
+        let app = Viewer::new(reader, options).or_fail()?;
         app.run().or_fail()?;
         Ok(())
     }

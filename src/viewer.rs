@@ -2,13 +2,24 @@ use std::{collections::BTreeMap, fs::File, time::Duration};
 
 use crossterm::event::{self, KeyCode, KeyEvent, KeyEventKind};
 use orfail::OrFail;
-use ratatui::{style::Stylize, widgets::Paragraph, DefaultTerminal};
+use ratatui::{
+    layout::{Alignment, Constraint, Layout},
+    prelude::{Buffer, Rect},
+    style::Stylize,
+    symbols::border,
+    text::{Line, Text},
+    widgets::{
+        block::{Position, Title},
+        Block, Paragraph, Widget,
+    },
+    DefaultTerminal,
+};
 
 use crate::{jsonl::JsonlReader, record::Record};
 
 const POLL_INTERVAL: Duration = Duration::from_millis(100);
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ViewerOptions {
     pub realtime: bool,
 }
@@ -31,16 +42,16 @@ impl RecordKey {
 }
 
 #[derive(Debug)]
-pub struct ViewerApp {
-    options: ViewerOptions,
+pub struct Viewer {
     terminal: DefaultTerminal,
+    options: ViewerOptions,
     reader: JsonlReader<File>,
-    records: BTreeMap<RecordKey, Record>,
     record_seqno: u64,
-    quit: bool,
+    exit: bool,
+    app: ViewerApp,
 }
 
-impl ViewerApp {
+impl Viewer {
     pub fn new(mut reader: JsonlReader<File>, options: ViewerOptions) -> orfail::Result<Self> {
         let mut record_seqno = 0;
         let mut records = BTreeMap::new();
@@ -52,26 +63,19 @@ impl ViewerApp {
         terminal.clear().or_fail()?;
 
         Ok(Self {
-            options,
+            options: options.clone(),
             terminal,
             reader,
-            records,
             record_seqno,
-            quit: false,
+            exit: false,
+            app: ViewerApp { records, options },
         })
     }
 
     pub fn run(mut self) -> orfail::Result<()> {
-        while !self.quit {
-            self.terminal
-                .draw(|frame| {
-                    let greeting = Paragraph::new("Hello Ratatui! (press 'q' to quit)")
-                        .white()
-                        .on_blue();
-                    frame.render_widget(greeting, frame.area());
-                })
-                .or_fail()?;
+        self.draw().or_fail()?;
 
+        while !self.exit {
             let mut need_redraw = false;
             if event::poll(POLL_INTERVAL).or_fail()? {
                 if let event::Event::Key(key) = event::read().or_fail()? {
@@ -83,13 +87,25 @@ impl ViewerApp {
 
             if self.options.realtime {
                 while let Some(record) = self.reader.read_item().or_fail()? {
-                    self.records
+                    self.app
+                        .records
                         .insert(RecordKey::new(&record, &mut self.record_seqno), record);
                     need_redraw = true;
                 }
             }
+
+            if need_redraw {
+                self.draw().or_fail()?;
+            }
         }
 
+        Ok(())
+    }
+
+    fn draw(&mut self) -> orfail::Result<()> {
+        self.terminal
+            .draw(|frame| frame.render_widget(&self.app, frame.area()))
+            .or_fail()?;
         Ok(())
     }
 
@@ -98,14 +114,61 @@ impl ViewerApp {
             return Ok(false);
         }
         if key.code == KeyCode::Char('q') {
-            self.quit = true;
+            self.exit = true;
         }
         Ok(false)
     }
 }
 
-impl Drop for ViewerApp {
+impl Drop for Viewer {
     fn drop(&mut self) {
         ratatui::restore();
+    }
+}
+
+#[derive(Debug)]
+pub struct ViewerApp {
+    options: ViewerOptions,
+    records: BTreeMap<RecordKey, Record>,
+}
+
+impl ViewerApp {
+    fn calculate_layout(&self, area: Rect) -> (Rect, Rect, Rect) {
+        let [header_area, main_area] =
+            Layout::vertical([Constraint::Length(5), Constraint::Min(0)]).areas(area);
+        let [status_area, help_area] =
+            Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)])
+                .areas(header_area);
+        (status_area, help_area, main_area)
+    }
+
+    fn render_status(&self, area: Rect, buf: &mut Buffer) {
+        let title = if self.options.realtime {
+            Title::from("Status (REALTIME)".bold())
+        } else {
+            Title::from("Status".bold())
+        };
+        let block = Block::bordered()
+            .title(title.alignment(Alignment::Left))
+            .border_set(border::THICK);
+        let main_layout = Layout::vertical([Constraint::Length(5), Constraint::Min(0)]);
+        let [header_area, _main_area] = main_layout.areas(area);
+
+        let text = vec![
+            Line::from("Time:    ... ~ ..."),
+            Line::from("Targets: 3"),
+            Line::from("Items:   5"),
+        ];
+        Paragraph::new(text)
+            .left_aligned()
+            .block(block)
+            .render(header_area, buf);
+    }
+}
+
+impl Widget for &ViewerApp {
+    fn render(self, area: Rect, buf: &mut Buffer) {
+        let (status_area, help_area, main_area) = self.calculate_layout(area);
+        self.render_status(status_area, buf);
     }
 }
