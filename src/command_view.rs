@@ -14,9 +14,6 @@ pub struct ViewCommand {
     record_jsonl_file: PathBuf,
 
     #[clap(short, long)]
-    realtime: bool,
-
-    #[clap(short, long)]
     absolute_time: bool,
 
     #[clap(short, long, default_value = "1")]
@@ -34,7 +31,6 @@ impl ViewCommand {
         let file = std::fs::File::open(&self.record_jsonl_file).or_fail()?;
         let reader = JsonlReader::new(file);
         let options = ViewerOptions {
-            realtime: self.realtime,
             absolute_time: self.absolute_time,
             interval: self.interval,
             chart_time_window: self.chart_time_window,

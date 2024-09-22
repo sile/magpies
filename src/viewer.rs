@@ -22,7 +22,6 @@ const POLL_INTERVAL: Duration = Duration::from_millis(100);
 
 #[derive(Debug, Clone)]
 pub struct ViewerOptions {
-    pub realtime: bool,
     pub absolute_time: bool,
     pub interval: SecondsNonZeroU64,
     pub chart_time_window: SecondsNonZeroU64,
@@ -32,7 +31,6 @@ pub struct ViewerOptions {
 #[derive(Debug)]
 pub struct Viewer {
     terminal: DefaultTerminal,
-    options: ViewerOptions,
     reader: JsonlReader<File>,
     exit: bool,
     app: ViewerApp,
@@ -49,7 +47,6 @@ impl Viewer {
         }
 
         Ok(Self {
-            options: options.clone(),
             terminal,
             reader,
             exit: false,
@@ -70,11 +67,9 @@ impl Viewer {
                 }
             }
 
-            if self.options.realtime {
-                while let Some(record) = self.reader.read_item().or_fail()? {
-                    self.app.insert_record(&record);
-                    need_redraw = true;
-                }
+            while let Some(record) = self.reader.read_item().or_fail()? {
+                self.app.insert_record(&record);
+                need_redraw = true;
             }
 
             if need_redraw {
@@ -137,12 +132,12 @@ impl ViewerApp {
     }
 
     fn sync_state(&mut self) {
+        if self.ts.is_empty() {
+            return;
+        }
+
         if !self.initialized {
-            if self.options.realtime {
-                self.current_time = self.ts.last_start_time();
-            } else {
-                self.current_time = self.ts.start_time;
-            }
+            self.current_time = self.ts.start_time;
             self.initialized = true;
         }
 
@@ -152,7 +147,12 @@ impl ViewerApp {
 
         self.ts.sync_state();
 
-        if self.options.realtime && self.current_time < self.ts.last_start_time() {
+        let prev_last_start_time = self
+            .ts
+            .last_start_time()
+            .get()
+            .checked_sub(self.options.interval.get());
+        if Some(self.current_time.get()) == prev_last_start_time {
             self.current_time = self.ts.last_start_time();
         }
     }
