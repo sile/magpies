@@ -1,13 +1,13 @@
-use std::{sync::mpsc, time::Duration};
+use std::sync::mpsc;
 
 use orfail::OrFail;
 
 use crate::{
     poller::{PollTarget, Poller},
-    record::Seconds,
+    record::SecondsU64,
 };
 
-const YEAR: Duration = Duration::from_secs(364 * 24 * 60 * 60);
+const YEAR: SecondsU64 = SecondsU64::new(364 * 24 * 60 * 60);
 
 #[derive(Debug, clap::Args)]
 pub struct PollCommand {
@@ -15,22 +15,22 @@ pub struct PollCommand {
     pub additional_targets: Vec<PollTarget>,
 
     #[clap(short = 'i', long, default_value = "1")]
-    pub poll_interval: Seconds,
+    pub poll_interval: SecondsU64,
 
     #[clap(short, long)]
-    pub poll_duration: Option<Seconds>,
+    pub poll_duration: Option<SecondsU64>,
 }
 
 impl PollCommand {
     pub fn run(self) -> orfail::Result<()> {
         let (record_tx, record_rx) = mpsc::channel();
 
-        let poll_duration = self.poll_duration.unwrap_or(Seconds::new(YEAR));
+        let poll_duration = self.poll_duration.unwrap_or(YEAR);
         for target in std::iter::once(self.target).chain(self.additional_targets.into_iter()) {
             Poller::start(
                 target,
-                self.poll_interval.get(),
-                poll_duration.get(),
+                self.poll_interval.to_duration(),
+                poll_duration.to_duration(),
                 record_tx.clone(),
             );
         }

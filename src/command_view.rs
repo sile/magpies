@@ -5,7 +5,7 @@ use regex::Regex;
 
 use crate::{
     jsonl::JsonlReader,
-    record::Seconds,
+    record::SecondsU64,
     viewer::{Viewer, ViewerOptions},
 };
 
@@ -17,10 +17,10 @@ pub struct ViewCommand {
     realtime: bool,
 
     #[clap(short, long, default_value = "1")]
-    interval: Seconds,
+    interval: SecondsU64,
 
     #[clap(short = 'w', long, default_value = "60")]
-    chart_time_window: Seconds,
+    chart_time_window: SecondsU64,
 
     #[clap(short = 'f', long, default_value = ".*")]
     item_filter: Regex,
@@ -32,8 +32,8 @@ impl ViewCommand {
         let reader = JsonlReader::new(file);
         let options = ViewerOptions {
             realtime: self.realtime,
-            interval: self.interval.get(),
-            chart_time_window: self.chart_time_window.get(),
+            interval: self.interval.to_duration(),
+            chart_time_window: self.chart_time_window.to_duration(),
             item_filter: self.item_filter,
         };
         let app = Viewer::new(reader, options).or_fail()?;

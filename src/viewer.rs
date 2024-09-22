@@ -39,7 +39,7 @@ impl RecordKey {
         let seqno = *next_seqno;
         *next_seqno += 1;
         Self {
-            timestamp: record.timestamp.get(),
+            timestamp: record.timestamp.to_duration(),
             seqno,
         }
     }

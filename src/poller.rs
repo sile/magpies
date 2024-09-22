@@ -8,7 +8,7 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
-use crate::record::{Record, Seconds};
+use crate::record::{Record, SecondsF64};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PollTarget {
@@ -63,7 +63,7 @@ impl Poller {
         if let Some(value) = self.poll() {
             let record = Record {
                 target: self.target.target.clone(),
-                timestamp: Seconds::timestamp(),
+                timestamp: SecondsF64::timestamp(),
                 value,
             };
             if self.record_tx.send(record).is_err() {
