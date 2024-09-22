@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, fs::File, time::Duration};
+use std::{fs::File, time::Duration};
 
 use crossterm::event::{self, KeyCode, KeyEvent, KeyEventKind};
 use orfail::OrFail;
@@ -15,7 +15,7 @@ use regex::Regex;
 
 use crate::{
     jsonl::JsonlReader,
-    record::{FlattenedRecord, Record},
+    record::{Record, SecondsNonZeroU64, SecondsU64, TimeSeries},
 };
 
 const POLL_INTERVAL: Duration = Duration::from_millis(100);
@@ -23,26 +23,9 @@ const POLL_INTERVAL: Duration = Duration::from_millis(100);
 #[derive(Debug, Clone)]
 pub struct ViewerOptions {
     pub realtime: bool,
-    pub interval: Duration,
-    pub chart_time_window: Duration,
+    pub interval: SecondsNonZeroU64,
+    pub chart_time_window: SecondsNonZeroU64,
     pub item_filter: Regex,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-struct RecordKey {
-    timestamp: Duration,
-    seqno: u64,
-}
-
-impl RecordKey {
-    fn new(record: &Record, next_seqno: &mut u64) -> Self {
-        let seqno = *next_seqno;
-        *next_seqno += 1;
-        Self {
-            timestamp: record.timestamp.to_duration(),
-            seqno,
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -50,29 +33,26 @@ pub struct Viewer {
     terminal: DefaultTerminal,
     options: ViewerOptions,
     reader: JsonlReader<File>,
-    record_seqno: u64,
     exit: bool,
     app: ViewerApp,
 }
 
 impl Viewer {
     pub fn new(mut reader: JsonlReader<File>, options: ViewerOptions) -> orfail::Result<Self> {
-        let mut record_seqno = 0;
-        let mut records = BTreeMap::new();
-        while let Some(record) = reader.read_item::<Record>().or_fail()? {
-            records.insert(RecordKey::new(&record, &mut record_seqno), record.flatten());
-        }
-
         let mut terminal = ratatui::init();
         terminal.clear().or_fail()?;
+
+        let mut app = ViewerApp::new(&options);
+        while let Some(record) = reader.read_item::<Record>().or_fail()? {
+            app.insert_record(&record);
+        }
 
         Ok(Self {
             options: options.clone(),
             terminal,
             reader,
-            record_seqno,
             exit: false,
-            app: ViewerApp { records, options },
+            app,
         })
     }
 
@@ -91,10 +71,7 @@ impl Viewer {
 
             if self.options.realtime {
                 while let Some(record) = self.reader.read_item().or_fail()? {
-                    self.app.records.insert(
-                        RecordKey::new(&record, &mut self.record_seqno),
-                        record.flatten(),
-                    );
+                    self.app.insert_record(&record);
                     need_redraw = true;
                 }
             }
@@ -108,6 +85,7 @@ impl Viewer {
     }
 
     fn draw(&mut self) -> orfail::Result<()> {
+        self.app.sync_state();
         self.terminal
             .draw(|frame| frame.render_widget(&self.app, frame.area()))
             .or_fail()?;
@@ -134,10 +112,38 @@ impl Drop for Viewer {
 #[derive(Debug)]
 pub struct ViewerApp {
     options: ViewerOptions,
-    records: BTreeMap<RecordKey, FlattenedRecord>,
+    ts: TimeSeries,
+    current_time: SecondsU64,
+    initialized: bool,
 }
 
 impl ViewerApp {
+    fn new(options: &ViewerOptions) -> Self {
+        Self {
+            options: options.clone(),
+            ts: TimeSeries::new(options.interval),
+            current_time: SecondsU64::new(0),
+            initialized: false,
+        }
+    }
+
+    fn insert_record(&mut self, record: &Record) {
+        self.ts.insert(record);
+    }
+
+    fn sync_state(&mut self) {
+        if !self.initialized {
+            if self.options.realtime {
+                self.current_time = self.ts.last_time();
+            } else {
+                self.current_time = self.ts.start_time;
+            }
+            self.initialized = true;
+        }
+
+        self.ts.sync_state();
+    }
+
     fn calculate_layout(&self, area: Rect) -> (Rect, Rect, Rect, Rect, Rect) {
         let [header_area, main_area] =
             Layout::vertical([Constraint::Length(5), Constraint::Min(0)]).areas(area);

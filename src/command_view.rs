@@ -32,8 +32,8 @@ impl ViewCommand {
         let reader = JsonlReader::new(file);
         let options = ViewerOptions {
             realtime: self.realtime,
-            interval: self.interval.to_duration(),
-            chart_time_window: self.chart_time_window.to_duration(),
+            interval: self.interval,
+            chart_time_window: self.chart_time_window,
             item_filter: self.item_filter,
         };
         let app = Viewer::new(reader, options).or_fail()?;

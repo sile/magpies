@@ -1,5 +1,6 @@
 use std::{
-    collections::BTreeMap,
+    cmp::Ordering,
+    collections::{BTreeMap, BTreeSet},
     num::{NonZeroU64, ParseIntError},
     str::FromStr,
     time::{Duration, UNIX_EPOCH},
@@ -109,6 +110,40 @@ pub enum ItemValue {
     String(String),
 }
 
+impl PartialOrd for ItemValue {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for ItemValue {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match (self, other) {
+            (Self::Null, Self::Null) => Ordering::Equal,
+            (Self::Bool(a), Self::Bool(b)) => a.cmp(b),
+            (Self::Integer(a), Self::Integer(b)) => a.cmp(b),
+            (Self::Float(a), Self::Float(b)) => a.total_cmp(b),
+            (Self::String(a), Self::String(b)) => a.cmp(b),
+            (Self::Null, _) => Ordering::Less,
+            (_, Self::Null) => Ordering::Greater,
+            (Self::Bool(_), _) => Ordering::Less,
+            (_, Self::Bool(_)) => Ordering::Greater,
+            (Self::Integer(_), _) => Ordering::Less,
+            (_, Self::Integer(_)) => Ordering::Greater,
+            (Self::Float(_), _) => Ordering::Less,
+            (_, Self::Float(_)) => Ordering::Greater,
+        }
+    }
+}
+
+impl PartialEq for ItemValue {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other).is_eq()
+    }
+}
+
+impl Eq for ItemValue {}
+
 fn flatten_json_value(value: &serde_json::Value, key: &mut String, items: &mut Items) {
     match value {
         serde_json::Value::Null => {
@@ -157,38 +192,102 @@ fn flatten_json_value(value: &serde_json::Value, key: &mut String, items: &mut I
     }
 }
 
+// TODO
 pub type Items = BTreeMap<String, ItemValue>;
 
 #[derive(Debug, Clone)]
 pub struct TimeSeries {
     pub start_time: SecondsU64,
-    pub segment_duration: SecondsU64,
-    pub segments: Vec<TimeSeriesSegment>,
+    pub segment_duration: SecondsNonZeroU64,
+    pub segments: BTreeMap<SecondsU64, TimeSeriesSegment>,
+    pub dirty_segments: BTreeSet<SecondsU64>,
 }
 
 impl TimeSeries {
-    pub fn new(segment_duration: SecondsU64) -> Self {
+    pub fn new(segment_duration: SecondsNonZeroU64) -> Self {
         Self {
             start_time: SecondsU64::new(0),
             segment_duration,
-            segments: Vec::new(),
+            segments: BTreeMap::new(),
+            dirty_segments: BTreeSet::new(),
         }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.segments.is_empty()
     }
 
     pub fn insert(&mut self, record: &Record) {
         let record = record.flatten();
 
-        if self.segments.is_empty() || record.timestamp.as_secs() < self.start_time.get() {
-            let timestamp = record.timestamp.as_secs();
-            self.start_time = SecondsU64::new(timestamp - timestamp % self.segment_duration.get());
+        let start_time = record.timestamp.as_secs();
+        let start_time = SecondsU64::new(start_time - start_time % self.segment_duration.get());
+        let end_time = SecondsU64::new(start_time.get() + 1);
+        if self.segments.is_empty() || start_time < self.start_time {
+            self.start_time = start_time;
+        }
+
+        let segment = self
+            .segments
+            .entry(start_time)
+            .or_insert_with(|| TimeSeriesSegment {
+                start_time,
+                end_time,
+                aggregated_values: BTreeMap::new(),
+                target_segment_values: BTreeMap::new(),
+            });
+        let target_segment = segment
+            .target_segment_values
+            .entry(record.target)
+            .or_default();
+        for (key, value) in record.items {
+            target_segment
+                .entry(key)
+                .or_default()
+                .raw_values
+                .push(value);
+        }
+
+        self.dirty_segments.insert(start_time);
+    }
+
+    pub fn last_time(&self) -> SecondsU64 {
+        self.segments
+            .last_key_value()
+            .map(|x| *x.0)
+            .unwrap_or_default()
+    }
+
+    pub fn sync_state(&mut self) {
+        for start_time in std::mem::take(&mut self.dirty_segments) {
+            //
         }
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct TimeSeriesSegment {
-    pub start_time: Duration,
-    pub end_time: Duration,
-    pub aggregated_items: Items,
-    pub target_items: BTreeMap<String, Items>,
+    pub start_time: SecondsU64,
+    pub end_time: SecondsU64,
+    pub aggregated_values: BTreeMap<String, AggregatedValue>,
+    pub target_segment_values: BTreeMap<String, BTreeMap<String, SegmentValue>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct AggregatedValue {
+    pub sum: Option<serde_json::Number>,
+    pub delta: Option<serde_json::Number>,
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct SegmentValue {
+    pub value: Option<RepresentativeValue>,
+    pub delta: Option<serde_json::Number>,
+    pub raw_values: Vec<ItemValue>,
+}
+
+#[derive(Debug, Clone)]
+pub enum RepresentativeValue {
+    Avg(serde_json::Number),
+    Set(BTreeSet<ItemValue>),
 }
