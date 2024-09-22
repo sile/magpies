@@ -378,7 +378,11 @@ impl ViewerApp {
                     Text::from(agg_value.sum_text(self.options.decimal_places)).right_aligned(),
                 ),
                 Cell::from(
-                    Text::from(agg_value.delta_text(self.options.decimal_places)).right_aligned(),
+                    Text::from(format!(
+                        "{}  ", // "  " is the padding for scroll bar
+                        agg_value.delta_text(self.options.decimal_places)
+                    ))
+                    .right_aligned(),
                 ),
             ]
             .into_iter()

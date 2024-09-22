@@ -295,7 +295,14 @@ impl TimeSeries {
     pub fn sync_state(&mut self) {
         let empty_segment = TimeSeriesSegment::empty(self.segment_duration);
         for start_time in std::mem::take(&mut self.dirty_segments) {
-            let prev_segment = self.segments.get(&start_time).unwrap_or(&empty_segment);
+            let prev_time = start_time
+                .get()
+                .checked_sub(self.segment_duration.get())
+                .map(SecondsU64::new);
+            let prev_segment = prev_time
+                .and_then(|t| self.segments.get(&t))
+                .unwrap_or(&empty_segment);
+
             let mut segment = self.segments.get(&start_time).expect("unreachable").clone();
             segment.sync_state(prev_segment);
             self.segments.insert(start_time, segment);
