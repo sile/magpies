@@ -7,13 +7,11 @@ use ratatui::{
     prelude::{Buffer, Rect},
     style::Stylize,
     symbols::border,
-    text::{Line, Text},
-    widgets::{
-        block::{Position, Title},
-        Block, Paragraph, Widget,
-    },
+    text::Line,
+    widgets::{block::Title, Block, Paragraph, Widget},
     DefaultTerminal,
 };
+use regex::Regex;
 
 use crate::{jsonl::JsonlReader, record::Record};
 
@@ -22,6 +20,9 @@ const POLL_INTERVAL: Duration = Duration::from_millis(100);
 #[derive(Debug, Clone)]
 pub struct ViewerOptions {
     pub realtime: bool,
+    pub interval: Duration,
+    pub chart_time_window: Duration,
+    pub item_filter: Regex,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -133,13 +134,25 @@ pub struct ViewerApp {
 }
 
 impl ViewerApp {
-    fn calculate_layout(&self, area: Rect) -> (Rect, Rect, Rect) {
+    fn calculate_layout(&self, area: Rect) -> (Rect, Rect, Rect, Rect, Rect) {
         let [header_area, main_area] =
             Layout::vertical([Constraint::Length(5), Constraint::Min(0)]).areas(area);
         let [status_area, help_area] =
             Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)])
                 .areas(header_area);
-        (status_area, help_area, main_area)
+        let [aggregation_area, main_right_area] =
+            Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)])
+                .areas(main_area);
+        let [values_area, chart_area] =
+            Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)])
+                .areas(main_right_area);
+        (
+            status_area,
+            help_area,
+            aggregation_area,
+            values_area,
+            chart_area,
+        )
     }
 
     fn render_status(&self, area: Rect, buf: &mut Buffer) {
@@ -151,8 +164,6 @@ impl ViewerApp {
         let block = Block::bordered()
             .title(title.alignment(Alignment::Left))
             .border_set(border::THICK);
-        let main_layout = Layout::vertical([Constraint::Length(5), Constraint::Min(0)]);
-        let [header_area, _main_area] = main_layout.areas(area);
 
         let text = vec![
             Line::from("Time:    ... ~ ..."),
@@ -162,7 +173,7 @@ impl ViewerApp {
         Paragraph::new(text)
             .left_aligned()
             .block(block)
-            .render(header_area, buf);
+            .render(area, buf);
     }
 
     fn render_help(&self, area: Rect, buf: &mut Buffer) {
@@ -179,12 +190,22 @@ impl ViewerApp {
             .block(block)
             .render(header_area, buf);
     }
+
+    fn render_aggregation(&self, _area: Rect, _buf: &mut Buffer) {}
+
+    fn render_values(&self, _area: Rect, _buf: &mut Buffer) {}
+
+    fn render_chart(&self, _area: Rect, _buf: &mut Buffer) {}
 }
 
 impl Widget for &ViewerApp {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        let (status_area, help_area, main_area) = self.calculate_layout(area);
+        let (status_area, help_area, aggregation_area, values_area, chart_area) =
+            self.calculate_layout(area);
         self.render_status(status_area, buf);
         self.render_help(help_area, buf);
+        self.render_aggregation(aggregation_area, buf);
+        self.render_values(values_area, buf);
+        self.render_chart(chart_area, buf);
     }
 }
