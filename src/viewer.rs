@@ -230,7 +230,24 @@ impl ViewerApp {
         let main_layout = Layout::vertical([Constraint::Length(5), Constraint::Min(0)]);
         let [header_area, _main_area] = main_layout.areas(area);
 
-        let text = vec![Line::from(vec!["Quit: ".into(), "<Q>".bold()])];
+        let text = vec![
+            Line::from(vec!["Quit: ".into(), "<Q>".bold()]),
+            Line::from(vec![
+                "Time: ".into(),
+                "<P>".bold(),
+                "rev, ".into(),
+                "<N>".bold(),
+                "ext, ".into(),
+                "<S>".bold(),
+                "tart, ".into(),
+                "<E>".bold(),
+                "nd".into(),
+            ]),
+            Line::from(vec![
+                "Move: ".into(),
+                "<Left>, <Right>, <Up>, <Down>".bold(),
+            ]),
+        ];
         Paragraph::new(text)
             .left_aligned()
             .block(block)
