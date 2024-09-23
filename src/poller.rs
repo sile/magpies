@@ -8,11 +8,10 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
-use crate::{num::SecondsF64, record::Record};
+use crate::{metrics::Record, num::SecondsF64};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PollTarget {
-    // TODO: rename
     pub target: String,
     pub command_path: PathBuf,
 

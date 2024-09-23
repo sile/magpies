@@ -9,8 +9,8 @@ use ratatui::{
     symbols::{border, Marker},
     text::{Line, Text},
     widgets::{
-        block::Title, Axis, Block, Cell, Chart, Dataset, GraphType, Paragraph, Row, Scrollbar,
-        ScrollbarOrientation, ScrollbarState, Table, TableState, Widget,
+        self, block::Title, Axis, Block, Cell, Chart, Dataset, GraphType, Paragraph, Row,
+        Scrollbar, ScrollbarOrientation, ScrollbarState, Table, TableState, Widget,
     },
     DefaultTerminal,
 };
@@ -18,8 +18,8 @@ use regex::Regex;
 
 use crate::{
     jsonl::JsonlReader,
+    metrics::{Record, TimeSeries, TimeSeriesSegment},
     num::{fmt_f64, fmt_u64, SecondsNonZeroU64, SecondsU64},
-    record::{Record, TimeSeries, TimeSeriesSegment},
 };
 
 const POLL_INTERVAL: Duration = Duration::from_millis(100);
@@ -456,10 +456,10 @@ impl ViewerApp {
             Style::new().bold()
         })
         .block(block);
-        ratatui::widgets::StatefulWidget::render(table, area, buf, &mut state.agg_table);
+        widgets::StatefulWidget::render(table, area, buf, &mut state.agg_table);
 
         // Scrollbar
-        ratatui::widgets::StatefulWidget::render(
+        widgets::StatefulWidget::render(
             Scrollbar::default()
                 .orientation(ScrollbarOrientation::VerticalRight)
                 .begin_symbol(None)
@@ -558,10 +558,10 @@ impl ViewerApp {
             Style::new().reversed()
         })
         .block(block);
-        ratatui::widgets::StatefulWidget::render(table, area, buf, &mut state.values_table);
+        widgets::StatefulWidget::render(table, area, buf, &mut state.values_table);
 
         // Scrollbar
-        ratatui::widgets::StatefulWidget::render(
+        widgets::StatefulWidget::render(
             Scrollbar::default()
                 .orientation(ScrollbarOrientation::VerticalRight)
                 .begin_symbol(None)
@@ -687,7 +687,7 @@ impl ViewerApp {
     }
 }
 
-impl ratatui::widgets::StatefulWidget for &ViewerApp {
+impl widgets::StatefulWidget for &ViewerApp {
     type State = ViewerWidgetState;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
