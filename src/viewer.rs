@@ -6,11 +6,11 @@ use ratatui::{
     layout::{Alignment, Constraint, Layout, Margin},
     prelude::{Buffer, Rect},
     style::{Style, Stylize},
-    symbols::border,
+    symbols::{self, border},
     text::{Line, Text},
     widgets::{
-        block::Title, Block, Cell, Paragraph, Row, Scrollbar, ScrollbarOrientation, ScrollbarState,
-        Table, TableState, Widget,
+        block::Title, Axis, Block, Cell, Chart, Dataset, GraphType, Paragraph, Row, Scrollbar,
+        ScrollbarOrientation, ScrollbarState, Table, TableState, Widget,
     },
     DefaultTerminal,
 };
@@ -442,7 +442,7 @@ impl ViewerApp {
             .title(title.alignment(Alignment::Left))
             .border_set(border::THICK);
 
-        let header = ["Name", "Sum", "Delta/s"]
+        let header = ["Name", "Value", "Delta/s"]
             .into_iter()
             .map(|t| Cell::from(Text::from(t).centered()))
             .collect::<Row>()
@@ -589,6 +589,7 @@ impl ViewerApp {
 
     fn render_chart(&self, area: Rect, buf: &mut Buffer, state: &ViewerWidgetState) {
         let key = self.selected_item_key(state);
+
         let title = if let Some(key) = key {
             Title::from(format!("Delta/s Chart of {key:?}").bold())
         } else {
@@ -598,10 +599,85 @@ impl ViewerApp {
         let block = Block::bordered()
             .title(title.alignment(Alignment::Left))
             .border_set(border::THICK);
-        Paragraph::new(Text::from("TODO"))
-            .left_aligned()
-            .block(block)
-            .render(area, buf);
+
+        let marker = if self.options.export_file.is_some() {
+            symbols::Marker::Dot
+        } else {
+            symbols::Marker::Braille
+        };
+
+        let base_time = self.base_time.get();
+        let end_time = self.current_time.get();
+        let start_time = end_time
+            .saturating_sub(
+                self.options.interval.get() * self.options.chart_time_window.get()
+                    / self.options.interval.get(),
+            )
+            .max(base_time);
+
+        let mut y_min = f64::INFINITY;
+        let mut y_max = f64::NEG_INFINITY;
+        let mut data = Vec::new();
+        for t in start_time..=end_time {
+            let Some(segment) = self.ts.segments.get(&SecondsU64::new(t)) else {
+                continue;
+            };
+
+            // TODO: consider in_agg_table
+            let Some(value) = key.and_then(|k| segment.aggregated_values.get(k)) else {
+                continue;
+            };
+
+            let Some(y) = value.delta.as_ref().and_then(|v| v.as_f64()) else {
+                continue;
+            };
+            data.push((t as f64, y));
+
+            y_min = y_min.min(y);
+            y_max = y_max.max(y);
+        }
+        if y_min.is_infinite() {
+            y_min = -1.0;
+            y_max = 1.0;
+        }
+        if y_min == y_max {
+            let v = y_min;
+            y_min = v - 1.0;
+            y_max = v + 1.0;
+        }
+
+        let decimal_places = if y_min.fract() == 0.0 && y_max.fract() == 0.0 {
+            0
+        } else {
+            self.options.decimal_places as usize
+        };
+
+        let datasets = vec![Dataset::default()
+            .marker(marker)
+            .graph_type(GraphType::Line)
+            .data(&data)];
+
+        let chart = Chart::new(datasets)
+            .x_axis(
+                Axis::default()
+                    .style(Style::default().gray())
+                    .bounds([start_time as f64, end_time as f64])
+                    .labels([
+                        format!("{}s", fmt_u64(start_time - base_time)).bold(),
+                        format!("{}s", fmt_u64(end_time - base_time)).bold(),
+                    ]),
+            )
+            .y_axis(
+                Axis::default()
+                    .style(Style::default().gray())
+                    .bounds([y_min, y_max])
+                    .labels([
+                        fmt_f64(y_min, decimal_places).bold(),
+                        fmt_f64(y_max, decimal_places).bold(),
+                    ]),
+            )
+            .block(block);
+        chart.render(area, buf);
     }
 }
 
@@ -652,7 +728,7 @@ pub fn fmt_f64(n: f64, decimal_places: usize) -> String {
     let s = format!("{:.1$}", n, decimal_places);
     let mut iter = s.splitn(2, '.');
     let integer = iter.next().expect("unreachable");
-    let fraction = iter.next().expect("unreachable");
+    let fraction = iter.next();
 
     let mut s = Vec::new();
     for (i, c) in integer.chars().rev().enumerate() {
@@ -663,12 +739,14 @@ pub fn fmt_f64(n: f64, decimal_places: usize) -> String {
     }
     s.reverse();
 
-    s.push('.');
-    for (i, c) in fraction.chars().enumerate() {
-        if i > 0 && i % 3 == 0 {
-            s.push(',');
+    if let Some(fraction) = fraction {
+        s.push('.');
+        for (i, c) in fraction.chars().enumerate() {
+            if i > 0 && i % 3 == 0 {
+                s.push(',');
+            }
+            s.push(c);
         }
-        s.push(c);
     }
 
     s.into_iter().collect()
