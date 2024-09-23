@@ -95,6 +95,11 @@ impl Viewer {
             .agg_table_scroll
             .content_length(self.app.current_segment().aggregated_values.len());
 
+        self.widget_state.values_table_scroll = self
+            .widget_state
+            .values_table_scroll
+            .content_length(self.app.current_segment().target_segment_values.len());
+
         self.terminal
             .draw(|frame| {
                 frame.render_stateful_widget(&self.app, frame.area(), &mut self.widget_state);
@@ -478,7 +483,7 @@ impl ViewerApp {
         .highlight_style(if self.in_agg_table {
             Style::new().reversed()
         } else {
-            Style::new()
+            Style::new().bold()
         })
         .block(block);
         ratatui::widgets::StatefulWidget::render(table, area, buf, &mut state.agg_table);
@@ -506,6 +511,21 @@ impl ViewerApp {
             .agg_table
             .selected()
             .and_then(|i| segment.aggregated_values.keys().nth(i).map(|k| k.as_str()))
+    }
+
+    fn selected_target(&self, state: &ViewerWidgetState) -> Option<&str> {
+        if self.in_agg_table {
+            return None;
+        }
+
+        let segment = self.current_segment();
+        state.values_table.selected().and_then(|i| {
+            segment
+                .target_segment_values
+                .keys()
+                .nth(i)
+                .map(|k| k.as_str())
+        })
     }
 
     fn render_values(&self, area: Rect, buf: &mut Buffer, state: &mut ViewerWidgetState) {
@@ -589,9 +609,20 @@ impl ViewerApp {
 
     fn render_chart(&self, area: Rect, buf: &mut Buffer, state: &ViewerWidgetState) {
         let key = self.selected_item_key(state);
+        let target = self.selected_target(state);
 
         let title = if let Some(key) = key {
-            Title::from(format!("Delta/s Chart of {key:?}").bold())
+            Title::from(
+                format!(
+                    "Delta/s Chart of {key:?}{}",
+                    if let Some(t) = target {
+                        format!(" of {t:?}")
+                    } else {
+                        "".to_owned()
+                    }
+                )
+                .bold(),
+            )
         } else {
             Title::from("Delta/s Chart".bold())
         };
@@ -623,12 +654,23 @@ impl ViewerApp {
                 continue;
             };
 
-            // TODO: consider in_agg_table
-            let Some(value) = key.and_then(|k| segment.aggregated_values.get(k)) else {
-                continue;
+            let delta = if self.in_agg_table {
+                key.and_then(|k| segment.aggregated_values.get(k))
+                    .and_then(|v| v.delta.as_ref().and_then(|v| v.as_f64()))
+            } else {
+                key.and_then(|k| {
+                    target
+                        .and_then(|t| {
+                            segment
+                                .target_segment_values
+                                .get(t)
+                                .and_then(|values| values.get(k))
+                        })
+                        .and_then(|v| v.delta.as_ref().and_then(|v| v.as_f64()))
+                })
             };
 
-            let Some(y) = value.delta.as_ref().and_then(|v| v.as_f64()) else {
+            let Some(y) = delta else {
                 continue;
             };
             data.push((t as f64, y));
