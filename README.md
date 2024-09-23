@@ -7,7 +7,7 @@ magpies
 
 A command-line tool for polling and visualizing JSON-formatted time series metrics.
 
-This tool does not require any schema definitions, making it ideal for quickly understanding an overview of JSON-formatted time series metrics.
+This tool does not require any schema definitions, making it ideal for quickly understanding an overview of targets that provide JSON-formatted metrics.
 
 For more detailed or complex analysis, it is recommended to use more feature-rich tools such as [Prometheus](https://prometheus.io/) and [Grafana](https://grafana.com/).
 
