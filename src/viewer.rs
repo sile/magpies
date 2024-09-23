@@ -304,6 +304,7 @@ impl ViewerApp {
         if !self.initialized {
             self.current_time = self.ts.last_start_time();
             self.initialized = true;
+            self.tail = true;
         }
 
         if !self.options.absolute_time {
@@ -313,13 +314,15 @@ impl ViewerApp {
         self.ts.sync_state();
 
         if self.tail {
-            let prev_last_start_time = self
+            if let Some(prev_last_start_time) = self
                 .ts
                 .last_start_time()
                 .get()
-                .checked_sub(self.options.interval.get());
-            if Some(self.current_time.get()) == prev_last_start_time {
-                self.current_time = self.ts.last_start_time();
+                .checked_sub(self.options.interval.get())
+            {
+                if self.current_time.get() < prev_last_start_time {
+                    self.current_time = SecondsU64::new(prev_last_start_time);
+                }
             }
         }
     }

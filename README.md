@@ -11,6 +11,9 @@ This tool does not require any schema definitions, making it ideal for quickly u
 
 For more detailed or complex analysis, it is recommended to use more feature-rich tools such as [Prometheus](https://prometheus.io/) and [Grafana](https://grafana.com/).
 
+Examples
+--------
+
 ```console
 // Install.
 $ cargo install magpies
