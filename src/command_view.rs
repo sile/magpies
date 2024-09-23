@@ -27,7 +27,7 @@ pub struct ViewCommand {
     decimal_places: u8,
 
     #[clap(short = 'f', long, default_value = ".*")]
-    item_filter: Regex,
+    metric_filter: Regex,
 
     #[clap(short, long)]
     portable_chart: bool,
@@ -42,7 +42,7 @@ impl ViewCommand {
             interval: self.interval,
             chart_time_window: self.chart_time_window,
             decimal_places: self.decimal_places,
-            item_filter: self.item_filter,
+            metric_filter: self.metric_filter,
             chart_marker: if self.portable_chart {
                 Marker::Dot
             } else {

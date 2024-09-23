@@ -29,7 +29,7 @@ pub struct ViewerOptions {
     pub interval: SecondsNonZeroU64,
     pub chart_time_window: SecondsNonZeroU64,
     pub decimal_places: u8,
-    pub item_filter: Regex,
+    pub metric_filter: Regex,
     pub chart_marker: Marker,
 }
 
@@ -368,9 +368,9 @@ impl ViewerApp {
                 fmt_u64(segment.target_segment_values.len() as u64)
             )),
             Line::from(format!(
-                "Items:   {} (filter={})",
+                "Metrics: {} (filter={})",
                 fmt_u64(segment.aggregated_values.len() as u64),
-                self.options.item_filter
+                self.options.metric_filter
             )),
         ];
         Paragraph::new(text)
@@ -411,7 +411,7 @@ impl ViewerApp {
     fn render_aggregation(&self, area: Rect, buf: &mut Buffer, state: &mut ViewerWidgetState) {
         let segment = self.current_segment();
 
-        let title = Title::from("Aggregated Items".bold());
+        let title = Title::from("Aggregated Metrics".bold());
         let block = Block::bordered()
             .title(title.alignment(Alignment::Left))
             .border_set(border::THICK);
@@ -501,9 +501,9 @@ impl ViewerApp {
         let segment = self.current_segment();
         let key = self.selected_item_key(state);
         let title = if let Some(key) = key {
-            Title::from(format!("Values of {key:?}").bold())
+            Title::from(format!("Metrics of {key:?}").bold())
         } else {
-            Title::from("Values".bold())
+            Title::from("Metrics".bold())
         };
 
         let block = Block::bordered()

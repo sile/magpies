@@ -19,12 +19,12 @@ pub struct Record {
 
 impl Record {
     pub fn flatten(&self) -> FlattenedRecord {
-        let mut items = Items::new();
-        flatten_json_value(&self.value, &mut String::new(), &mut items);
+        let mut metrics = BTreeMap::new();
+        flatten_json_value(&self.value, &mut String::new(), &mut metrics);
         FlattenedRecord {
             target: self.target.clone(),
             timestamp: self.timestamp.to_duration(),
-            items,
+            metrics,
         }
     }
 }
@@ -100,12 +100,12 @@ impl FromStr for SecondsNonZeroU64 {
 pub struct FlattenedRecord {
     pub target: String,
     pub timestamp: Duration,
-    pub items: Items,
+    pub metrics: BTreeMap<String, MetricValue>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged, rename_all = "snake_case")]
-pub enum ItemValue {
+pub enum MetricValue {
     Null,
     Bool(bool),
     Integer(i64),
@@ -113,7 +113,7 @@ pub enum ItemValue {
     String(String),
 }
 
-impl ItemValue {
+impl MetricValue {
     pub fn is_number(&self) -> bool {
         matches!(self, Self::Integer(_) | Self::Float(_))
     }
@@ -141,13 +141,13 @@ impl ItemValue {
     }
 }
 
-impl PartialOrd for ItemValue {
+impl PartialOrd for MetricValue {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl Ord for ItemValue {
+impl Ord for MetricValue {
     fn cmp(&self, other: &Self) -> Ordering {
         match (self, other) {
             (Self::Null, Self::Null) => Ordering::Equal,
@@ -167,35 +167,39 @@ impl Ord for ItemValue {
     }
 }
 
-impl PartialEq for ItemValue {
+impl PartialEq for MetricValue {
     fn eq(&self, other: &Self) -> bool {
         self.cmp(other).is_eq()
     }
 }
 
-impl Eq for ItemValue {}
+impl Eq for MetricValue {}
 
-fn flatten_json_value(value: &serde_json::Value, key: &mut String, items: &mut Items) {
+fn flatten_json_value(
+    value: &serde_json::Value,
+    key: &mut String,
+    metrics: &mut BTreeMap<String, MetricValue>,
+) {
     match value {
         serde_json::Value::Null => {
-            items.insert(key.clone(), ItemValue::Null);
+            metrics.insert(key.clone(), MetricValue::Null);
         }
         serde_json::Value::Bool(v) => {
-            items.insert(key.clone(), ItemValue::Bool(*v));
+            metrics.insert(key.clone(), MetricValue::Bool(*v));
         }
         serde_json::Value::Number(v) => {
             if let Some(v) = v.as_i64() {
-                items.insert(key.clone(), ItemValue::Integer(v));
+                metrics.insert(key.clone(), MetricValue::Integer(v));
             } else if v.as_u64().is_some() {
-                items.insert(key.clone(), ItemValue::Integer(i64::MAX));
+                metrics.insert(key.clone(), MetricValue::Integer(i64::MAX));
             } else if let Some(v) = v.as_f64() {
-                items.insert(key.clone(), ItemValue::Float(v));
+                metrics.insert(key.clone(), MetricValue::Float(v));
             } else {
                 unreachable!();
             }
         }
         serde_json::Value::String(v) => {
-            items.insert(key.clone(), ItemValue::String(v.clone()));
+            metrics.insert(key.clone(), MetricValue::String(v.clone()));
         }
         serde_json::Value::Array(vs) => {
             let len = key.len();
@@ -205,7 +209,7 @@ fn flatten_json_value(value: &serde_json::Value, key: &mut String, items: &mut I
                     key.push('.');
                 }
                 key.push_str(&format!("{i:0width$}"));
-                flatten_json_value(value, key, items);
+                flatten_json_value(value, key, metrics);
                 key.truncate(len);
             }
         }
@@ -216,15 +220,12 @@ fn flatten_json_value(value: &serde_json::Value, key: &mut String, items: &mut I
                     key.push('.');
                 }
                 key.push_str(name);
-                flatten_json_value(value, key, items);
+                flatten_json_value(value, key, metrics);
                 key.truncate(len);
             }
         }
     }
 }
-
-// TODO
-pub type Items = BTreeMap<String, ItemValue>;
 
 #[derive(Debug, Clone)]
 pub struct TimeSeries {
@@ -274,7 +275,7 @@ impl TimeSeries {
             .target_segment_values
             .entry(record.target)
             .or_default();
-        for (key, value) in record.items {
+        for (key, value) in record.metrics {
             target_segment
                 .entry(key)
                 .or_default()
@@ -483,7 +484,7 @@ impl AggregatedValue {
 pub struct SegmentValue {
     pub value: RepresentativeValue,
     pub delta: Option<serde_json::Number>,
-    pub raw_values: Vec<ItemValue>,
+    pub raw_values: Vec<MetricValue>,
 }
 
 impl SegmentValue {
@@ -548,7 +549,7 @@ impl SegmentValue {
 #[derive(Debug, Clone)]
 pub enum RepresentativeValue {
     Avg(serde_json::Number),
-    Set(BTreeSet<ItemValue>),
+    Set(BTreeSet<MetricValue>),
 }
 
 impl Default for RepresentativeValue {
