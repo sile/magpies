@@ -9,14 +9,17 @@ use crate::{
 
 const YEAR: SecondsU64 = SecondsU64::new(364 * 24 * 60 * 60);
 
+/// Poll the metrics of the specified targets and output the results in JSON Lines format to stdout.
 #[derive(Debug, clap::Args)]
 pub struct PollCommand {
-    pub target: PollTarget,
-    pub additional_targets: Vec<PollTarget>,
+    /// JSON objects to specify polling targets.
+    pub targets: Vec<PollTarget>,
 
+    /// Polling interval duration in seconds.
     #[clap(short = 'i', long, default_value = "1")]
     pub poll_interval: SecondsU64,
 
+    /// Total duration of polling in seconds.
     #[clap(short, long)]
     pub poll_duration: Option<SecondsU64>,
 }
@@ -26,7 +29,7 @@ impl PollCommand {
         let (record_tx, record_rx) = mpsc::channel();
 
         let poll_duration = self.poll_duration.unwrap_or(YEAR);
-        for target in std::iter::once(self.target).chain(self.additional_targets.into_iter()) {
+        for target in self.targets {
             Poller::start(
                 target,
                 self.poll_interval.to_duration(),
@@ -34,6 +37,7 @@ impl PollCommand {
                 record_tx.clone(),
             );
         }
+        std::mem::drop(record_tx);
 
         while let Ok(record) = record_rx.recv() {
             println!("{}", serde_json::to_string(&record).or_fail()?);

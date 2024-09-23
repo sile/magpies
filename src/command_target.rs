@@ -4,11 +4,16 @@ use orfail::OrFail;
 
 use crate::poller::PollTarget;
 
+/// Generate a JSON object that defines a polling target.
 #[derive(Debug, clap::Args)]
 pub struct TargetCommand {
+    /// Path for the command to poll the metrics of the target.
     pub command_path: PathBuf,
+
+    /// Arguments for the command.
     pub command_args: Vec<String>,
 
+    /// The target name. If omitted, `target.${RANDOM_NUMBER}` will be used instead.
     #[clap(short, long)]
     pub target: Option<String>,
 }

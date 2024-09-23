@@ -4,7 +4,9 @@ use magpies::{
 };
 use orfail::OrFail;
 
+/// Command-line tool for polling and visualizing JSON-formatted time series metrics.
 #[derive(Parser)]
+#[clap(version)]
 enum Args {
     Poll(PollCommand),
     View(ViewCommand),

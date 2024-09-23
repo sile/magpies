@@ -12,13 +12,13 @@ use crate::num::{fmt_f64, fmt_i64, SecondsF64, SecondsNonZeroU64, SecondsU64};
 pub struct Record {
     pub target: String,
     pub timestamp: SecondsF64,
-    pub value: serde_json::Value,
+    pub metrics: serde_json::Value,
 }
 
 impl Record {
     pub fn flatten(&self) -> FlattenedRecord {
         let mut metrics = BTreeMap::new();
-        flatten_json_value(&self.value, &mut String::new(), &mut metrics);
+        flatten_json_value(&self.metrics, &mut String::new(), &mut metrics);
         FlattenedRecord {
             target: self.target.clone(),
             timestamp: self.timestamp.to_duration(),

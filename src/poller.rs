@@ -63,7 +63,7 @@ impl Poller {
             let record = Record {
                 target: self.target.target.clone(),
                 timestamp: SecondsF64::timestamp(),
-                value,
+                metrics: value,
             };
             if self.record_tx.send(record).is_err() {
                 return false;
