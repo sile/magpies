@@ -53,4 +53,30 @@ $ magpies poll $LOCAL_TARGET $REMOTE_TARGET | tee metrics.jsonl
 {"target":"local","timestamp":1727066397.68037,"metrics":{"memory":{"available_memory":38723633152,"total_memory":68719476736,"total_swap":0,"used_memory":32799850496,"used_swap":0}}}
 {"target":"remote","timestamp":1727066398.052064,"metrics":{"memory":{"available_memory":3853238272,"total_memory":11564953600,"total_swap":8589930496,"used_memory":7711715328,"used_swap":2966417408}}}
 ...
+
+// Launch the TUI viewer in a separate terminal.
+$ magpies view metrics.jsonl --interval 5 --portable-chart
+┏Status━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓┏Help━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃Time:    120s ~ 124s (between 0s ~ 124s)                  ┃┃Quit: <Q>                                                ┃
+┃Targets: 2                                                ┃┃Time: <P>rev, <N>ext, <S>tart, <E>nd                     ┃
+┃Metrics: 5 (filter=.*)                                    ┃┃Move: <Left>, <Right>, <Up>, <Down>, <PageUp>, <PageDown>┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+┏Aggregated Metrics━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓┏Metrics of "memory.used_memory"━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃           Name                  Value         Delta/s   ║┃┃       Target               Value            Delta/s    █┃
+┃memory.available_memory      42,546,443,605     -353,293 ║┃┃local                    32,797,085,696        -747,601 █┃
+┃memory.total_memory          80,284,430,336            0 █┃┃remote                    7,746,992,810       1,172,493 █┃
+┃memory.total_swap             8,589,930,496            0 █┃┃                                                        █┃
+┃memory.used_memory           40,544,078,506      424,891 █┃┃                                                        █┃
+┃memory.used_swap              2,955,407,360            0 █┃┃                                                        █┃
+┃                                                         █┃┃                                                        ║┃
+┃                                                         █┃┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+┃                                                         █┃┏Delta/s Chart of "memory.used_memory"━━━━━━━━━━━━━━━━━━━━┓
+┃                                                         █┃┃2,629,345 │   •••    ••      ••      •••           ••••  ┃
+┃                                                         █┃┃          │  •   ••••  •    •  ••  ••   ••      •••    ••┃
+┃                                                         █┃┃          │ •           •   •    ••       ••  ••         ┃
+┃                                                         █┃┃          │•             • •                ••           ┃
+┃                                                         █┃┃-3,064,996│               •                              ┃
+┃                                                         █┃┃          └──────────────────────────────────────────────┃
+┃                                                         ║┃┃        60s                                          120s┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 ```
