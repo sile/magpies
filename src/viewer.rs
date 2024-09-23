@@ -261,7 +261,7 @@ impl ViewerApp {
     }
 
     fn insert_record(&mut self, record: &Record) {
-        self.ts.insert(record);
+        self.ts.insert(record, &self.options.metric_filter);
     }
 
     fn go_to_prev_time(&mut self) {

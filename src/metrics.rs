@@ -4,6 +4,7 @@ use std::{
     time::Duration,
 };
 
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 
 use crate::num::{fmt_f64, fmt_i64, SecondsF64, SecondsNonZeroU64, SecondsU64};
@@ -182,8 +183,9 @@ impl TimeSeries {
         self.segments.is_empty()
     }
 
-    pub fn insert(&mut self, record: &Record) {
-        let record = record.flatten();
+    pub fn insert(&mut self, record: &Record, filter: &Regex) {
+        let mut record = record.flatten();
+        record.metrics.retain(|k, _| filter.is_match(k));
 
         let start_time = record.timestamp.as_secs();
         self.end_time = self.end_time.max(SecondsU64::new(start_time + 1));
