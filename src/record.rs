@@ -186,7 +186,7 @@ fn flatten_json_value(value: &serde_json::Value, key: &mut String, items: &mut I
         serde_json::Value::Number(v) => {
             if let Some(v) = v.as_i64() {
                 items.insert(key.clone(), ItemValue::Integer(v));
-            } else if let Some(_) = v.as_u64() {
+            } else if v.as_u64().is_some() {
                 items.insert(key.clone(), ItemValue::Integer(i64::MAX));
             } else if let Some(v) = v.as_f64() {
                 items.insert(key.clone(), ItemValue::Float(v));

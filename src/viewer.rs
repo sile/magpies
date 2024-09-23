@@ -190,13 +190,11 @@ impl Viewer {
             )
         };
         if delta < 0 {
-            table.scroll_up_by(delta.abs() as u16);
+            table.scroll_up_by(delta.unsigned_abs());
         } else {
             table.scroll_down_by(delta as u16);
         }
-        *scroll = scroll
-            .clone()
-            .position(table.selected().unwrap_or_default());
+        *scroll = (*scroll).position(table.selected().unwrap_or_default());
     }
 }
 
@@ -725,9 +723,9 @@ pub fn fmt_u64(mut n: u64) -> String {
 
 pub fn fmt_i64(n: i64) -> String {
     if n < 0 {
-        format!("-{}", fmt_u64(n.abs() as u64))
+        format!("-{}", fmt_u64(n.unsigned_abs()))
     } else {
-        fmt_u64(n.abs() as u64)
+        fmt_u64(n.unsigned_abs())
     }
 }
 

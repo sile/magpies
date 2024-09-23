@@ -100,7 +100,7 @@ impl Poller {
                     if let Some(code) = output.status.code() {
                         format!(" with code {code}")
                     } else {
-                        format!("")
+                        "".to_owned()
                     },
                     String::from_utf8_lossy(&output.stdout),
                     String::from_utf8_lossy(&output.stderr)
