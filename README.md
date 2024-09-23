@@ -99,12 +99,12 @@ Viewer Terms
   - `Delta/s` column:
     - If the metric is numeric, `({{ CURRENT_VALUE }} - {{ PREVIOUS_VALUE }}) / {{ INTERVAL_SECONDS }}` is displayed.
 - `Metrics of "{{ METRIC_NAME }}"` table:
-  - `Target`:
+  - `Target` column:
     - The target name.
-  - `Value`:
+  - `Value` column:
     - The metric value of the target.
     - If multiple values are collected within the same interval:
       - For numeric metrics, the average of the values is displayed.
       - For non-numeric metrics, the union of the values is displayed.
-  - `Delta/s`
+  - `Delta/s` column:
     - If the metric is numeric, `({{ CURRENT_VALUE }} - {{ PREVIOUS_VALUE }}) / {{ INTERVAL_SECONDS }}` is displayed.
