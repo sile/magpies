@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use orfail::OrFail;
+use ratatui::symbols::Marker;
 use regex::Regex;
 
 use crate::{
@@ -29,7 +30,7 @@ pub struct ViewCommand {
     item_filter: Regex,
 
     #[clap(short, long)]
-    export_file: Option<PathBuf>,
+    portable_chart: bool,
 }
 
 impl ViewCommand {
@@ -42,7 +43,11 @@ impl ViewCommand {
             chart_time_window: self.chart_time_window,
             decimal_places: self.decimal_places,
             item_filter: self.item_filter,
-            export_file: self.export_file,
+            chart_marker: if self.portable_chart {
+                Marker::Dot
+            } else {
+                Marker::Braille
+            },
         };
         let app = Viewer::new(reader, options).or_fail()?;
         app.run().or_fail()?;

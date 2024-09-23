@@ -1,4 +1,4 @@
-use std::{fs::File, io::Write, path::PathBuf, time::Duration};
+use std::{fs::File, time::Duration};
 
 use crossterm::event::{self, KeyCode, KeyEvent, KeyEventKind};
 use orfail::OrFail;
@@ -6,7 +6,7 @@ use ratatui::{
     layout::{Alignment, Constraint, Layout, Margin},
     prelude::{Buffer, Rect},
     style::{Style, Stylize},
-    symbols::{self, border},
+    symbols::{border, Marker},
     text::{Line, Text},
     widgets::{
         block::Title, Axis, Block, Cell, Chart, Dataset, GraphType, Paragraph, Row, Scrollbar,
@@ -30,7 +30,7 @@ pub struct ViewerOptions {
     pub chart_time_window: SecondsNonZeroU64,
     pub decimal_places: u8,
     pub item_filter: Regex,
-    pub export_file: Option<PathBuf>,
+    pub chart_marker: Marker,
 }
 
 #[derive(Debug)]
@@ -102,14 +102,9 @@ impl Viewer {
 
         self.terminal
             .draw(|frame| {
-                frame.render_stateful_widget(&self.app, frame.area(), &mut self.widget_state);
-                self.app.export_to_file(frame.area(), frame.buffer_mut());
+                frame.render_stateful_widget(&self.app, frame.area(), &mut self.widget_state)
             })
             .or_fail()?;
-
-        if let Some(e) = self.app.export_error.take() {
-            return Err(e).or_fail();
-        }
 
         Ok(())
     }
@@ -244,7 +239,6 @@ pub struct ViewerApp {
     empty_segment: TimeSeriesSegment,
     tail: bool,
     in_agg_table: bool,
-    export_error: Option<orfail::Failure>,
 }
 
 impl ViewerApp {
@@ -258,30 +252,7 @@ impl ViewerApp {
             empty_segment: TimeSeriesSegment::empty(options.interval),
             tail: false,
             in_agg_table: true,
-            export_error: None,
         }
-    }
-
-    fn export_to_file(&mut self, area: Rect, buffer: &Buffer) {
-        let Some(path) = &self.options.export_file else {
-            return;
-        };
-
-        let result = (|| {
-            let width = area.width as usize;
-            let mut file = std::fs::File::create(path).or_fail_with(|e| {
-                format!("Failed to open export file {:?}: {e}", path.display())
-            })?;
-            for (i, cell) in buffer.content().iter().enumerate() {
-                if i > 0 && i % width == 0 {
-                    file.write_all(&[b'\n']).or_fail()?;
-                }
-                file.write_all(cell.symbol().as_bytes()).or_fail()?;
-            }
-            file.write_all(&[b'\n']).or_fail()?;
-            Ok(())
-        })();
-        self.export_error = result.err();
     }
 
     fn insert_record(&mut self, record: &Record) {
@@ -631,12 +602,6 @@ impl ViewerApp {
             .title(title.alignment(Alignment::Left))
             .border_set(border::THICK);
 
-        let marker = if self.options.export_file.is_some() {
-            symbols::Marker::Dot
-        } else {
-            symbols::Marker::Braille
-        };
-
         let base_time = self.base_time.get();
         let end_time = self.current_time.get();
         let start_time = end_time
@@ -695,7 +660,7 @@ impl ViewerApp {
         };
 
         let datasets = vec![Dataset::default()
-            .marker(marker)
+            .marker(self.options.chart_marker)
             .graph_type(GraphType::Line)
             .data(&data)];
 
