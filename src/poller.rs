@@ -8,7 +8,7 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
-use crate::record::{Record, SecondsF64};
+use crate::{num::SecondsF64, record::Record};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PollTarget {

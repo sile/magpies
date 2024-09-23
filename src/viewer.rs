@@ -18,7 +18,8 @@ use regex::Regex;
 
 use crate::{
     jsonl::JsonlReader,
-    record::{Record, SecondsNonZeroU64, SecondsU64, TimeSeries, TimeSeriesSegment},
+    num::{fmt_f64, fmt_u64, SecondsNonZeroU64, SecondsU64},
+    record::{Record, TimeSeries, TimeSeriesSegment},
 };
 
 const POLL_INTERVAL: Duration = Duration::from_millis(100);
@@ -698,61 +699,4 @@ impl ratatui::widgets::StatefulWidget for &ViewerApp {
         self.render_values(values_area, buf, state);
         self.render_chart(chart_area, buf, state);
     }
-}
-
-// TODO
-pub fn fmt_u64(mut n: u64) -> String {
-    if n == 0 {
-        return n.to_string();
-    }
-
-    let mut s = Vec::new();
-    let mut i = 0;
-    while n > 0 {
-        if i > 0 && i % 3 == 0 {
-            s.push(',');
-        }
-        let d = (n % 10) as u8;
-        s.push(char::from(b'0' + d));
-        n /= 10;
-        i += 1;
-    }
-    s.reverse();
-    s.into_iter().collect()
-}
-
-pub fn fmt_i64(n: i64) -> String {
-    if n < 0 {
-        format!("-{}", fmt_u64(n.unsigned_abs()))
-    } else {
-        fmt_u64(n.unsigned_abs())
-    }
-}
-
-pub fn fmt_f64(n: f64, decimal_places: usize) -> String {
-    let s = format!("{:.1$}", n, decimal_places);
-    let mut iter = s.splitn(2, '.');
-    let integer = iter.next().expect("unreachable");
-    let fraction = iter.next();
-
-    let mut s = Vec::new();
-    for (i, c) in integer.chars().rev().enumerate() {
-        if c != '-' && i > 0 && i % 3 == 0 {
-            s.push(',');
-        }
-        s.push(c);
-    }
-    s.reverse();
-
-    if let Some(fraction) = fraction {
-        s.push('.');
-        for (i, c) in fraction.chars().enumerate() {
-            if i > 0 && i % 3 == 0 {
-                s.push(',');
-            }
-            s.push(c);
-        }
-    }
-
-    s.into_iter().collect()
 }

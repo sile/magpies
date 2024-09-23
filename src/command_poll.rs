@@ -3,8 +3,8 @@ use std::sync::mpsc;
 use orfail::OrFail;
 
 use crate::{
+    num::SecondsU64,
     poller::{PollTarget, Poller},
-    record::SecondsU64,
 };
 
 const YEAR: SecondsU64 = SecondsU64::new(364 * 24 * 60 * 60);
@@ -39,20 +39,6 @@ impl PollCommand {
             println!("{}", serde_json::to_string(&record).or_fail()?);
         }
 
-        // while self
-        //     .poll_duration
-        //     .map_or(true, |d| start_time.elapsed() <= d.get())
-        // {
-        //     // let value = self.poll().or_fail()?;
-        //     // let record = Record {
-        //     //     target: target.clone(),
-        //     //     timestamp: Seconds::new(UNIX_EPOCH.elapsed().or_fail()?),
-        //     //     value,
-        //     // };
-
-        //     next_poll_time += self.poll_interval.get();
-        //     std::thread::sleep(next_poll_time.saturating_duration_since(Instant::now()));
-        // }
         Ok(())
     }
 }

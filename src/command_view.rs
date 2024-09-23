@@ -6,7 +6,7 @@ use regex::Regex;
 
 use crate::{
     jsonl::JsonlReader,
-    record::SecondsNonZeroU64,
+    num::SecondsNonZeroU64,
     viewer::{Viewer, ViewerOptions},
 };
 
