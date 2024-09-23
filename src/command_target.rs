@@ -15,13 +15,13 @@ pub struct TargetCommand {
 
     /// The target name. If omitted, `target.${RANDOM_NUMBER}` will be used instead.
     #[clap(short, long)]
-    pub target: Option<String>,
+    pub name: Option<String>,
 }
 
 impl TargetCommand {
     pub fn run(mut self) -> orfail::Result<()> {
         let target = self
-            .target
+            .name
             .take()
             .unwrap_or_else(|| format!("target.{}", std::process::id()));
 
