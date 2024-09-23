@@ -85,3 +85,26 @@ $ magpies view metrics.jsonl --interval 5 --portable-chart
 ┃                                                         ║┃┃        60s                                          120s┃
 ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 ```
+
+Viewer Terms
+------------
+
+- `Aggregated Metrics` table:
+  - `Name` column:
+    - The name of the metric.
+  - `Value` column:
+    - The aggregated value of the metric.
+    - For numeric metrics, the sum of the metric values of the targets is displayed.
+    - For non-numeric metrics, the union of the metric values of the targets is displayed.
+  - `Delta/s` column:
+    - If the metric is numeric, `({{ CURRENT_VALUE }} - {{ PREVIOUS_VALUE }}) / {{ INTERVAL_SECONDS }}` is displayed.
+- `Metrics of "{{ METRIC_NAME }}"` table:
+  - `Target`:
+    - The target name.
+  - `Value`:
+    - The metric value of the target.
+    - If multiple values are collected within the same interval:
+      - For numeric metrics, the average of the values is displayed.
+      - For non-numeric metrics, the union of the values is displayed.
+  - `Delta/s`
+    - If the metric is numeric, `({{ CURRENT_VALUE }} - {{ PREVIOUS_VALUE }}) / {{ INTERVAL_SECONDS }}` is displayed.
