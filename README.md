@@ -11,7 +11,7 @@ This tool does not require any schema definitions, making it ideal for quickly u
 
 For more detailed or complex analysis, it is recommended to use more feature-rich tools such as [Prometheus](https://prometheus.io/) and [Grafana](https://grafana.com/).
 
-![magpies](https://github.com/user-attachments/assets/a6176200-570d-42d4-b2ca-e1813bb2a4ae)
+![magpies](https://github.com/user-attachments/assets/88818790-1837-4682-a722-601f3e759c92)
 
 Examples
 --------
