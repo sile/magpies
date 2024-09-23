@@ -669,6 +669,18 @@ impl ViewerApp {
             .graph_type(GraphType::Line)
             .data(&data)];
 
+        let mut y_min_label = fmt_f64(y_min, decimal_places);
+        let mut y_max_label = fmt_f64(y_max, decimal_places);
+        match y_min_label.len().cmp(&y_max_label.len()) {
+            std::cmp::Ordering::Equal => {}
+            std::cmp::Ordering::Less => {
+                y_min_label = format!("{y_min_label:>width$}", width = y_max_label.len());
+            }
+            std::cmp::Ordering::Greater => {
+                y_max_label = format!("{y_max_label:>width$}", width = y_min_label.len());
+            }
+        }
+
         let chart = Chart::new(datasets)
             .x_axis(
                 Axis::default()
@@ -683,10 +695,7 @@ impl ViewerApp {
                 Axis::default()
                     .style(Style::default().gray())
                     .bounds([y_min, y_max])
-                    .labels([
-                        fmt_f64(y_min, decimal_places).bold(),
-                        fmt_f64(y_max, decimal_places).bold(),
-                    ]),
+                    .labels([y_min_label.bold(), y_max_label.bold()]),
             )
             .block(block);
         chart.render(area, buf);
