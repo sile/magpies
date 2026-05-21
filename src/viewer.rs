@@ -69,11 +69,10 @@ impl Viewer {
             let mut need_redraw = false;
             if event::poll(POLL_INTERVAL).or_fail()? {
                 match event::read().or_fail()? {
-                    event::Event::Key(key) => {
-                        if self.handle_key_event(key).or_fail()? {
+                    event::Event::Key(key)
+                        if self.handle_key_event(key).or_fail()? => {
                             need_redraw = true;
                         }
-                    }
                     event::Event::Resize { .. } => {
                         need_redraw = true;
                     }
